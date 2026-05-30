@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design Tokens ── */
+:root {
+  --color-bg: #0f1117;
+  --color-sidebar: #0a0c11;
+  --color-sidebar-border: rgba(255,255,255,0.06);
+  --color-card: #13161f;
+  --color-card-border: rgba(255,255,255,0.07);
+  --color-primary: #f0f0f8;
+  --color-muted: #6b7280;
+  --color-accent: #f97316;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.dark {
+  --color-bg: #0f1117;
+  --color-sidebar: #0a0c11;
+  --color-sidebar-border: rgba(255,255,255,0.06);
+  --color-card: #13161f;
+  --color-card-border: rgba(255,255,255,0.07);
+  --color-primary: #f0f0f8;
+  --color-muted: #6b7280;
+}
+
+/* Light theme */
+:root:not(.dark) {
+  --color-bg: #f3f4f8;
+  --color-sidebar: #ffffff;
+  --color-sidebar-border: rgba(0,0,0,0.08);
+  --color-card: #ffffff;
+  --color-card-border: rgba(0,0,0,0.08);
+  --color-primary: #111827;
+  --color-muted: #6b7280;
+}
+
+/* ── Base ── */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Tailwind CSS Variable Classes ── */
+@layer components {
+  .bg-main { background-color: var(--color-bg); }
+  .bg-sidebar { background-color: var(--color-sidebar); }
+  .border-sidebar-border { border-color: var(--color-sidebar-border); }
+  .text-sidebar-text { color: var(--color-primary); }
+  .text-sidebar-muted { color: var(--color-muted); }
+
+  .card {
+    background-color: var(--color-card);
+    border: 1px solid var(--color-card-border);
+    border-radius: 1rem;
+    padding: 1.25rem;
+  }
+
+  .bg-card { background-color: var(--color-card); }
+  .border-card-border { border-color: var(--color-card-border); }
+  .text-primary { color: var(--color-primary); }
+  .text-muted { color: var(--color-muted); }
+
+  .input {
+    width: 100%;
+    background-color: rgba(255,255,255,0.04);
+    border: 1px solid var(--color-card-border);
+    border-radius: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--color-primary);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    font-family: inherit;
+  }
+
+  :root:not(.dark) .input {
+    background-color: rgba(0,0,0,0.03);
+  }
+
+  .input:focus {
+    border-color: #f97316;
+    box-shadow: 0 0 0 3px rgba(249,115,22,0.1);
+  }
+
+  .input::placeholder {
+    color: var(--color-muted);
+  }
+
+  select.input option {
+    background-color: #1a1d28;
+    color: var(--color-primary);
+  }
+
+  :root:not(.dark) select.input option {
+    background-color: white;
+  }
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ── Number Inputs ── */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type='number'] { -moz-appearance: textfield; }
