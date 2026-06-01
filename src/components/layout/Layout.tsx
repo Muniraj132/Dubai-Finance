@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard, CreditCard, TrendingUp, Target, Gem, BarChart3,
-  Wallet, Download, Sun, Moon, Calculator, Palmtree, Settings, Menu, X, ChevronRight
+  Wallet, Download, Sun, Moon, Calculator, Palmtree, Settings, Menu, X,
+  ChevronRight, User, LogOut,
 } from 'lucide-react';
 import { useAppStore, useSettings } from '../../stores/useAppStore';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -24,6 +26,7 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const settings = useSettings();
   const updateSettings = useAppStore((s) => s.updateSettings);
+  const { user, signOut } = useAuthStore();
 
   const toggleTheme = () => updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' });
 
@@ -88,7 +91,25 @@ export default function Layout() {
         </nav>
 
         {/* Footer */}
-        <div className="px-4 py-4 border-t border-sidebar-border">
+        <div className="px-4 py-4 border-t border-sidebar-border space-y-3">
+          {/* User row */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0">
+                <User size={12} className="text-orange-400" />
+              </div>
+              <span className="text-xs text-sidebar-muted truncate">{user?.email}</span>
+            </div>
+            <button
+              onClick={signOut}
+              title="Sign out"
+              className="w-7 h-7 rounded-lg bg-white/5 hover:bg-red-500/15 flex items-center justify-center text-sidebar-muted hover:text-red-400 transition-colors shrink-0"
+            >
+              <LogOut size={13} />
+            </button>
+          </div>
+
+          {/* Rate + theme toggle */}
           <div className="flex items-center justify-between">
             <span className="text-xs text-sidebar-muted">1 AED = ₹{settings.aedToInrRate}</span>
             <button
