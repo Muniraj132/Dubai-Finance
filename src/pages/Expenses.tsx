@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Edit2, Trash2, Filter } from 'lucide-react';
-import { useAppStore, useExpenses, useSettings } from '../stores/useAppStore';
+import { Plus, Search, Edit2, Trash2, Filter, AlertTriangle } from 'lucide-react';
+import { useAppStore, useExpenses, useSettings, useIncomes } from '../stores/useAppStore';
 import { Expense, ExpenseCategory, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState, Badge } from '../components/ui';
-import { EXPENSE_CATEGORIES, CATEGORY_COLORS, formatDate, getCurrentMonthKey, getMonthKey, generateId } from '../utils';
+import { EXPENSE_CATEGORIES, CATEGORY_COLORS, formatDate, getCurrentMonthKey, getMonthKey, generateId, convertToAED } from '../utils';
 
 const defaultForm = (): Omit<Expense, 'id' | 'createdAt'> => ({
   date: new Date().toISOString().split('T')[0],
@@ -15,8 +15,10 @@ const defaultForm = (): Omit<Expense, 'id' | 'createdAt'> => ({
 
 export default function Expenses() {
   const expenses = useExpenses();
+  const incomes = useIncomes();
   const { addExpense, updateExpense, deleteExpense } = useAppStore();
   const settings = useSettings();
+  const { aedToInrRate } = settings;
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -40,7 +42,34 @@ export default function Expenses() {
     });
   }, [expenses, filterMonth, filterCategory, search]);
 
-  const totalFiltered = filtered.reduce((s, e) => s + (e.currency === 'AED' ? e.amount : e.amount / settings.aedToInrRate), 0);
+  const totalFiltered = filtered.reduce((s, e) => s + convertToAED(e.amount, e.currency, aedToInrRate), 0);
+  const totalFilteredINR = totalFiltered * aedToInrRate;
+
+  // Spending warning for current month
+  const currentMonth = getCurrentMonthKey();
+  const monthlyExpenses = useMemo(() =>
+    expenses.filter(e => getMonthKey(e.date) === currentMonth)
+      .reduce((s, e) => s + convertToAED(e.amount, e.currency, aedToInrRate), 0),
+    [expenses, currentMonth, aedToInrRate]
+  );
+  const monthlyIncome = useMemo(() =>
+    incomes.filter(i => getMonthKey(i.date) === currentMonth)
+      .reduce((s, i) => s + convertToAED(i.amount, i.currency, aedToInrRate), 0),
+    [incomes, currentMonth, aedToInrRate]
+  );
+  const spendingRatio = monthlyIncome > 0 ? monthlyExpenses / monthlyIncome : 0;
+  const showOverBudget = filterMonth === currentMonth && monthlyIncome > 0 && spendingRatio >= 1;
+  const showHighSpending = filterMonth === currentMonth && monthlyIncome > 0 && spendingRatio >= 0.8 && spendingRatio < 1;
+
+  // Live conversion preview in modal
+  const convertedAmount = form.amount > 0
+    ? form.currency === 'AED'
+      ? form.amount * aedToInrRate
+      : form.amount / aedToInrRate
+    : 0;
+  const convertedLabel = form.currency === 'AED'
+    ? `≈ ₹${convertedAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })} INR`
+    : `≈ AED ${convertedAmount.toLocaleString('en-AE', { maximumFractionDigits: 2 })}`;
 
   const openAdd = () => { setForm(defaultForm()); setEditId(null); setModalOpen(true); };
   const openEdit = (exp: Expense) => {
@@ -60,9 +89,33 @@ export default function Expenses() {
     <div className="space-y-5">
       <PageHeader
         title="Expenses"
-        subtitle={`${filtered.length} transactions · AED ${totalFiltered.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+        subtitle={`${filtered.length} transactions · AED ${totalFiltered.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · ₹${totalFilteredINR.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
         action={<Button onClick={openAdd}><Plus size={16} /> Add Expense</Button>}
       />
+
+      {/* Spending warnings */}
+      {showOverBudget && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30">
+          <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="text-sm font-semibold text-red-400">Expenses exceed income this month!</div>
+            <div className="text-xs text-red-300/80 mt-0.5">
+              Spent AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{(monthlyExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {monthlyIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
+            </div>
+          </div>
+        </div>
+      )}
+      {showHighSpending && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30">
+          <AlertTriangle size={16} className="text-yellow-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="text-sm font-semibold text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
+            <div className="text-xs text-yellow-300/80 mt-0.5">
+              AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{(monthlyExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(monthlyIncome - monthlyExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} remaining this month.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -92,43 +145,50 @@ export default function Expenses() {
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Date</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Category</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide hidden sm:table-cell">Notes</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Amount(AED)</th>
-                     <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Amount(INR)</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Amount</th>
                   <th className="px-4 py-3 w-16"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-card-border">
-                {filtered.map(exp => (
-                  <tr key={exp.id} className="hover:bg-white/3 transition-colors group">
-                    <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{formatDate(exp.date)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                          style={{ background: CATEGORY_COLORS[exp.category] ?? '#78716c' }}>
-                          {exp.category[0]}
+                {filtered.map(exp => {
+                  const inINR = exp.currency === 'AED' ? exp.amount * aedToInrRate : exp.amount;
+                  const inAED = exp.currency === 'INR' ? exp.amount / aedToInrRate : exp.amount;
+                  return (
+                    <tr key={exp.id} className="hover:bg-white/3 transition-colors group">
+                      <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{formatDate(exp.date)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                            style={{ background: CATEGORY_COLORS[exp.category] ?? '#78716c' }}>
+                            {exp.category[0]}
+                          </div>
+                          <span className="text-primary font-medium text-xs">{exp.category}</span>
                         </div>
-                        <span className="text-primary font-medium text-xs">{exp.category}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted text-xs hidden sm:table-cell max-w-[200px] truncate">{exp.notes || '—'}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-red-400 whitespace-nowrap">
-                      {exp.currency} {exp.amount.toLocaleString('en-AE', { maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-blue-400 whitespace-nowrap">
-                      INR {(exp.amount * settings.aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 2 }) || '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => openEdit(exp)} className="p-1 text-muted hover:text-primary transition-colors">
-                          <Edit2 size={13} />
-                        </button>
-                        <button onClick={() => setDeleteId(exp.id)} className="p-1 text-muted hover:text-red-400 transition-colors">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3 text-muted text-xs hidden sm:table-cell max-w-[200px] truncate">{exp.notes || '—'}</td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <div className="font-semibold text-red-400 text-sm">
+                          {exp.currency} {exp.amount.toLocaleString('en-AE', { maximumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-[10px] text-muted mt-0.5">
+                          {exp.currency === 'AED'
+                            ? `≈ ₹${inINR.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                            : `≈ AED ${inAED.toLocaleString('en-AE', { maximumFractionDigits: 2 })}`}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => openEdit(exp)} className="p-1 text-muted hover:text-primary transition-colors">
+                            <Edit2 size={13} />
+                          </button>
+                          <button onClick={() => setDeleteId(exp.id)} className="p-1 text-muted hover:text-red-400 transition-colors">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -150,7 +210,17 @@ export default function Expenses() {
             </FormField>
           </div>
           <FormField label="Amount">
-            <Input type="number" min="0" step="0.01" value={form.amount || ''} onChange={e => setForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} placeholder="0.00" />
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.amount || ''}
+              onChange={e => setForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))}
+              placeholder="0.00"
+            />
+            {form.amount > 0 && (
+              <div className="text-xs text-orange-400 font-medium">{convertedLabel}</div>
+            )}
           </FormField>
           <FormField label="Category">
             <Select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as ExpenseCategory }))}>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAppStore, useSettings } from '../stores/useAppStore';
 import { PageHeader, FormField, Input, Button } from '../components/ui';
 
@@ -8,6 +8,15 @@ export default function Settings () {
 
   const [rate, setRate] = useState(settings.aedToInrRate.toString());
   const [arrivalDate, setArrivalDate] = useState(settings.dubaiArrivalDate);
+
+  // Sync local state when the store finishes loading from Supabase after a page refresh
+  useEffect(() => {
+    setRate(settings.aedToInrRate.toString());
+  }, [settings.aedToInrRate]);
+
+  useEffect(() => {
+    setArrivalDate(settings.dubaiArrivalDate);
+  }, [settings.dubaiArrivalDate]);
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
