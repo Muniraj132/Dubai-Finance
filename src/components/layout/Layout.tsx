@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard, CreditCard, TrendingUp, Target, Gem, BarChart3,
@@ -26,7 +26,15 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const settings = useSettings();
   const updateSettings = useAppStore((s) => s.updateSettings);
+  const rateJustUpdated = useAppStore((s) => s.rateJustUpdated);
+  const setRateJustUpdated = useAppStore((s) => s.setRateJustUpdated);
   const { user, signOut } = useAuthStore();
+
+  useEffect(() => {
+    if (!rateJustUpdated) return;
+    const t = setTimeout(() => setRateJustUpdated(false), 4000);
+    return () => clearTimeout(t);
+  }, [rateJustUpdated, setRateJustUpdated]);
 
   const toggleTheme = () => updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' });
 
@@ -140,6 +148,11 @@ export default function Layout() {
           </button>
         </header>
 
+        {rateJustUpdated && (
+          <div className="mx-4 mt-4 md:mx-6 lg:mx-8 px-4 py-2.5 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-400 text-center">
+            Exchange rate updated — 1 AED = ₹{settings.aedToInrRate}
+          </div>
+        )}
         <main className="flex-1 p-4 md:p-6 lg:p-8">
           <Outlet />
         </main>

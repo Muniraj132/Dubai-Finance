@@ -23,8 +23,10 @@ interface AppState {
   goldPurchases: GoldPurchase[];
   settings: AppSettings;
   isLoading: boolean;
+  rateJustUpdated: boolean;
 
   initialize: () => Promise<void>;
+  setRateJustUpdated: (v: boolean) => void;
   reset: () => void;
 
   addExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => Promise<void>;
@@ -57,6 +59,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
   goldPurchases: [],
   settings: DEFAULT_SETTINGS,
   isLoading: false,
+  rateJustUpdated: false,
+
+  setRateJustUpdated: (v) => set({ rateJustUpdated: v }),
 
   initialize: async () => {
     set({ isLoading: true });
@@ -166,7 +171,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const merged = { ...get().settings, ...settings };
     set({ settings: merged });
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('settings').upsert({ user_id: user!.id, ...merged });
+    if (user) {
+      await supabase.from('settings').upsert({ user_id: user.id, ...merged });
+    }
   },
 }));
 

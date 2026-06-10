@@ -92,7 +92,8 @@ export default function Expenses() {
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Date</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Category</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide hidden sm:table-cell">Notes</th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Amount</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Amount(AED)</th>
+                     <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Amount(INR)</th>
                   <th className="px-4 py-3 w-16"></th>
                 </tr>
               </thead>
@@ -112,6 +113,9 @@ export default function Expenses() {
                     <td className="px-4 py-3 text-muted text-xs hidden sm:table-cell max-w-[200px] truncate">{exp.notes || '—'}</td>
                     <td className="px-4 py-3 text-right font-semibold text-red-400 whitespace-nowrap">
                       {exp.currency} {exp.amount.toLocaleString('en-AE', { maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-blue-400 whitespace-nowrap">
+                      INR {(exp.amount * settings.aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 2 }) || '—'}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

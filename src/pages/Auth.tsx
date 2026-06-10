@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Palmtree } from 'lucide-react';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useAppStore } from '../stores/useAppStore';
 import { Button, FormField, Input } from '../components/ui';
 
 type Mode = 'login' | 'register';
@@ -19,6 +20,7 @@ export default function Auth() {
     setSubmitting(true);
     if (mode === 'login') {
       await signIn(email, password);
+      if (!useAuthStore.getState().error) fetchexchagerate();
     } else {
       await signUp(email, password);
       const { error: err } = useAuthStore.getState();
@@ -32,6 +34,24 @@ export default function Auth() {
     setRegistered(false);
     setMode(m);
   };
+
+  function fetchexchagerate() {
+    if (sessionStorage.getItem('exchangeRateFetched')) return;
+    fetch('https://api.exchangerate-api.com/v4/latest/AED')
+      .then(response => response.json())
+      .then(data => {
+        if (data.rates.INR) {
+          useAppStore.getState().updateSettings({ aedToInrRate: data.rates.INR });
+          sessionStorage.setItem('exchangeRateFetched', 'true');
+          useAppStore.getState().setRateJustUpdated(true);
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching exchange rate:', error);
+      });
+  }
+
+
 
   return (
     <div className="min-h-screen bg-main flex items-center justify-center p-4">
