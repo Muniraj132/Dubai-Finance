@@ -65,9 +65,9 @@ export default function DubaiLife() {
       <PageHeader title="Dubai Life" subtitle="Your personal journey dashboard" />
 
       {/* Hero */}
-      <div className="card bg-gradient-to-br from-orange-500/15 to-amber-500/10 border-orange-500/20 text-center py-8">
+      <div className="card bg-gradient-to-br from-[#A6445D]/15 to-[#C75B76]/10 border-[#A6445D]/20 text-center py-8">
         <div className="flex justify-center mb-3">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/30">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#C75B76] to-[#A6445D] flex items-center justify-center shadow-lg shadow-[#A6445D]/30">
             <Palmtree size={28} className="text-white" />
           </div>
         </div>

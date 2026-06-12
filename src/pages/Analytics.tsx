@@ -132,7 +132,7 @@ export default function Analytics() {
       {/* Today's Summary */}
       <div className="card">
         <div className="flex items-center gap-2 mb-4">
-          <CalendarDays size={15} className="text-orange-400" />
+          <CalendarDays size={15} className="text-[#A6445D]" />
           <h2 className="text-sm font-semibold text-primary">Today's Summary</h2>
           <span className="text-xs text-muted ml-auto">{today}</span>
         </div>
@@ -206,7 +206,7 @@ export default function Analytics() {
           <h2 className="text-sm font-semibold text-primary mb-1">This Month — by Category</h2>
           <div className="text-xs text-muted mb-4">
             Total: AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
-            <span className="ml-2 text-orange-400">≈ ₹{(currentMonthExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+          <span className="ml-2 text-[#A6445D]">≈ ₹{(currentMonthExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
           </div>
           {currentMonthCategoryData.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-muted text-sm">No expenses this month.</div>

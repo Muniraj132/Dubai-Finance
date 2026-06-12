@@ -50,11 +50,11 @@ export default function Converter() {
       <PageHeader title="AED → INR Converter" subtitle="Convert between UAE Dirham and Indian Rupee" />
 
       {/* Rate Banner */}
-      <div className="card bg-gradient-to-r from-orange-500/10 to-amber-500/10 border-orange-500/20">
+      <div className="card bg-gradient-to-r from-[#A6445D]/10 to-[#C75B76]/10 border-[#A6445D]/20">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-xs text-muted mb-1">Current Rate</div>
-            <div className="text-2xl font-bold text-orange-400">1 AED = ₹{settings.aedToInrRate}</div>
+            <div className="text-2xl font-bold text-[#A6445D]">1 AED = ₹{settings.aedToInrRate}</div>
           </div>
           <button
             onClick={() => { setEditRate(true); setNewRate(settings.aedToInrRate.toString()); }}
@@ -96,7 +96,7 @@ export default function Converter() {
         <div className="flex justify-center">
           <button
             onClick={handleSwap}
-            className="w-10 h-10 rounded-full bg-orange-500/15 border border-orange-500/30 flex items-center justify-center text-orange-400 hover:bg-orange-500/25 transition-colors"
+            className="w-10 h-10 rounded-full bg-[#A6445D]/15 border border-[#A6445D]/30 flex items-center justify-center text-[#A6445D] hover:bg-[#A6445D]/25 transition-colors"
           >
             <ArrowRightLeft size={16} />
           </button>
@@ -132,9 +132,9 @@ export default function Converter() {
             <button
               key={amt}
               onClick={() => setQuick(amt)}
-              className="flex flex-col items-center py-3 px-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-orange-500/30 transition-all group"
+              className="flex flex-col items-center py-3 px-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-[#A6445D]/30 transition-all group"
             >
-              <span className="text-sm font-semibold text-primary group-hover:text-orange-400">AED {amt.toLocaleString()}</span>
+              <span className="text-sm font-semibold text-primary group-hover:text-[#A6445D]">AED {amt.toLocaleString()}</span>
               <span className="text-xs text-muted mt-0.5">₹{(amt * settings.aedToInrRate).toLocaleString('en-IN')}</span>
             </button>
           ))}

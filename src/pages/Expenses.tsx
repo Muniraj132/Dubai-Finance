@@ -219,7 +219,7 @@ export default function Expenses() {
               placeholder="0.00"
             />
             {form.amount > 0 && (
-              <div className="text-xs text-orange-400 font-medium">{convertedLabel}</div>
+              <div className="text-xs text-[#A6445D] font-medium">{convertedLabel}</div>
             )}
           </FormField>
           <FormField label="Category">

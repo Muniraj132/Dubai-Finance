@@ -137,14 +137,14 @@ export default function Dashboard() {
           value={`${savingsRate.toFixed(1)}%`}
           sub={savingsRate >= 30 ? '🎉 Excellent!' : savingsRate >= 20 ? '👍 Good' : '⚠️ Low'}
           icon={<Percent size={16} />}
-          color="orange"
+          color="theme"
         />
       </div>
 
       {/* Exchange rate banner */}
-      <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20">
-        <ArrowRightLeft size={16} className="text-orange-400 shrink-0" />
-        <span className="text-sm text-orange-300">
+      <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-[#A6445D]/10 to-[#C75B76]/10 border border-[#A6445D]/20">
+        <ArrowRightLeft size={16} className="text-[#A6445D] shrink-0" />
+        <span className="text-sm text-[#C75B76]">
           <span className="font-semibold">Live Rate:</span> 1 AED = ₹{aedToInrRate} INR &nbsp;·&nbsp;
           AED {monthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })} = ₹{(monthIncome * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
         </span>

@@ -6,19 +6,32 @@ export const Card = ({ children, className = '' }: { children: ReactNode; classN
   <div className={`card ${className}`}>{children}</div>
 );
 
+const colorMap: Record<string, { bg: string; text: string }> = {
+  theme: { bg: 'bg-[#A6445D]/15', text: 'text-[#A6445D]' },
+  green: { bg: 'bg-green-500/15', text: 'text-green-400' },
+  red: { bg: 'bg-red-500/15', text: 'text-red-400' },
+  blue: { bg: 'bg-blue-500/15', text: 'text-blue-400' },
+  yellow: { bg: 'bg-yellow-500/15', text: 'text-yellow-400' },
+  amber: { bg: 'bg-amber-500/15', text: 'text-amber-400' },
+  pink: { bg: 'bg-pink-500/15', text: 'text-pink-400' },
+  orange: { bg: 'bg-orange-500/15', text: 'text-orange-400' },
+};
+
 // StatCard
 export const StatCard = ({
-  title, value, sub, icon, trend, color = 'orange'
+  title, value, sub, icon, trend, color = 'theme'
 }: {
   title: string; value: string; sub?: string; icon: ReactNode; trend?: number; color?: string;
-}) => (
-  <div className="card flex flex-col gap-3">
-    <div className="flex items-start justify-between">
-      <span className="text-sm text-muted font-medium">{title}</span>
-      <div className={`w-9 h-9 rounded-xl bg-${color}-500/15 flex items-center justify-center text-${color}-400`}>
-        {icon}
+}) => {
+  const colors = colorMap[color] || colorMap.theme;
+  return (
+    <div className="card flex flex-col gap-3">
+      <div className="flex items-start justify-between">
+        <span className="text-sm text-muted font-medium">{title}</span>
+        <div className={`w-9 h-9 rounded-xl ${colors.bg} flex items-center justify-center ${colors.text}`}>
+          {icon}
+        </div>
       </div>
-    </div>
     <div>
       <div className="text-2xl font-bold text-primary tracking-tight">{value}</div>
       {sub && <div className="text-xs text-muted mt-1">{sub}</div>}
@@ -29,7 +42,8 @@ export const StatCard = ({
       </div>
     )}
   </div>
-);
+  );
+};
 
 // Modal
 export const Modal = ({
@@ -88,7 +102,7 @@ export const Button = ({
   children, variant = 'primary', className = '', ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant }) => {
   const variants: Record<BtnVariant, string> = {
-    primary: 'bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-500/25',
+    primary: 'bg-[#A6445D] hover:bg-[#8A384C] text-white shadow-lg shadow-[#A6445D]/25',
     secondary: 'bg-white/10 hover:bg-white/15 text-primary border border-white/10',
     danger: 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20',
     ghost: 'hover:bg-white/5 text-muted hover:text-primary',
@@ -104,14 +118,17 @@ export const Button = ({
 };
 
 // Badge
-export const Badge = ({ children, color = 'orange' }: { children: ReactNode; color?: string }) => (
-  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-${color}-500/15 text-${color}-400`}>
-    {children}
-  </span>
-);
+export const Badge = ({ children, color = 'theme' }: { children: ReactNode; color?: string }) => {
+  const colors = colorMap[color] || colorMap.theme;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
+      {children}
+    </span>
+  );
+};
 
 // ProgressBar
-export const ProgressBar = ({ value, color = '#f97316', showLabel = true }: { value: number; color?: string; showLabel?: boolean }) => {
+export const ProgressBar = ({ value, color = '#A6445D', showLabel = true }: { value: number; color?: string; showLabel?: boolean }) => {
   const pct = Math.min(100, Math.max(0, value));
   const barColor = pct >= 100 ? '#ef4444' : pct >= 80 ? '#f59e0b' : color;
   return (

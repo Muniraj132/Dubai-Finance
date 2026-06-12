@@ -73,7 +73,7 @@ export default function GoldTracker() {
           value={`AED ${stats.totalValue.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
           sub={`≈ ${formatCurrency(stats.totalValue * settings.aedToInrRate, 'INR')}`}
           icon={<Gem size={16} />}
-          color="orange"
+          color="theme"
         />
         <StatCard
           title="Purchases"

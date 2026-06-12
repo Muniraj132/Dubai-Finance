@@ -68,7 +68,7 @@ export default function Settings () {
               onClick={() => updateSettings({ theme: t })}
               className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${
                 settings.theme === t
-                  ? 'bg-orange-500/15 border-orange-500/30 text-orange-400'
+                  ? 'bg-[#A6445D]/15 border-[#A6445D]/30 text-[#A6445D]'
                   : 'bg-white/5 border-white/10 text-muted hover:border-white/20'
               }`}
             >
