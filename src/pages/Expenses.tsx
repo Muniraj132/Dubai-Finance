@@ -39,7 +39,7 @@ export default function Expenses() {
       const matchCat = filterCategory === 'All' || e.category === filterCategory;
       const matchSearch = !search || e.notes.toLowerCase().includes(search.toLowerCase()) || e.category.toLowerCase().includes(search.toLowerCase());
       return matchMonth && matchCat && matchSearch;
-    });
+    }).sort((a, b) => b.date.localeCompare(a.date));
   }, [expenses, filterMonth, filterCategory, search]);
 
   const totalFiltered = filtered.reduce((s, e) => s + convertToAED(e.amount, e.currency, aedToInrRate), 0);

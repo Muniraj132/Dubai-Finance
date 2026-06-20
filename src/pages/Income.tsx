@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Edit2, Trash2, TrendingUp } from 'lucide-react';
+import { Plus, Edit2, Trash2, TrendingUp, CircleCheck } from 'lucide-react';
 import { useAppStore, useIncomes, useSettings } from '../stores/useAppStore';
 import { Income, IncomeSource, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState } from '../components/ui';
@@ -60,7 +60,17 @@ export default function IncomePage() {
         subtitle={`${filtered.length} entries · AED ${total.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
         action={<Button onClick={openAdd}><Plus size={16} /> Add Income</Button>}
       />
-
+      <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/30">
+                <CircleCheck size={16} className="text-green-400 shrink-0 mt-0.5" />
+                <div>
+                <div className="text-sm font-semibold text-green-400">
+                  Happy to see your income growing! Consider setting up a budget to manage your expenses effectively.
+                  </div>
+                  <div className="text-xs text-green-300/80 mt-0.5">
+                  Tip: Allocate a portion of your income towards savings or investments to build a secure financial future.
+                  </div>
+                </div>
+      </div>
       <div className="flex justify-end">
         <Select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-40">
           <option value="all">All Months</option>
