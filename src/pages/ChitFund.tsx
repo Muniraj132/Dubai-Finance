@@ -286,6 +286,7 @@ export default function ChitFunds() {
             <StatCard
               title="Pot Received"
               value={listStats.totalReceived > 0 ? fmt(listStats.totalReceived) : '—'}
+              sub="Lump sum collected from your chit turn"
               icon={<Banknote size={18} />}
               color="blue"
             />
@@ -405,7 +406,7 @@ export default function ChitFunds() {
             <StatCard title="Total Paid" value={fmt(detailStats.paid)} icon={<CheckCircle2 size={18} />} color="green" />
             <StatCard title="Remaining" value={fmt(detailStats.pending)} icon={<Clock size={18} />} color="yellow" />
             {selectedChit.received_amount != null ? (
-              <StatCard title="Pot Received" value={fmt(selectedChit.received_amount)} icon={<Banknote size={18} />} color="blue" />
+              <StatCard title="Pot Received" value={fmt(selectedChit.received_amount)} sub="Lump sum collected from your chit turn" icon={<Banknote size={18} />} color="blue" />
             ) : (
               <StatCard
                 title="Months Done"
