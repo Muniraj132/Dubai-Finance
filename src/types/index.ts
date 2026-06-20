@@ -78,3 +78,35 @@ export interface MonthlyStats {
   expenses: number;
   savings: number;
 }
+
+export type ChitStatus = 'active' | 'completed' | 'dropped';
+export type InstallmentStatus = 'pending' | 'paid' | 'partial' | 'missed';
+
+export interface ChitFund {
+  id: string;
+  name: string;
+  total_amount: number;
+  duration_months: number;
+  organizer: string;
+  start_date: string;
+  end_date: string;
+  status: ChitStatus;
+  received_amount: number | null;
+  received_month_no: number | null;
+  notes: string;
+  createdAt: string;
+}
+
+export interface ChitInstallment {
+  id: string;
+  chit_id: string;
+  month_no: number;
+  due_date: string;
+  amount: number;
+  paid_amount: number | null;
+  paid_date: string;
+  payment_mode: string;
+  status: InstallmentStatus;
+  remark: string;
+  createdAt: string;
+}

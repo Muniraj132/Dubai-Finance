@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../utils/supabase';
-import { Expense, Income, Goal, Budget, GoldPurchase, AppSettings } from '../types';
+import { Expense, Income, Goal, Budget, GoldPurchase, AppSettings, ChitFund, ChitInstallment } from '../types';
 import { generateId } from '../utils';
 
 const getUid = async () => {
@@ -21,6 +21,8 @@ interface AppState {
   goals: Goal[];
   budgets: Budget[];
   goldPurchases: GoldPurchase[];
+  chitFunds: ChitFund[];
+  chitInstallments: ChitInstallment[];
   settings: AppSettings;
   isLoading: boolean;
   rateJustUpdated: boolean;
@@ -48,6 +50,14 @@ interface AppState {
   updateGoldPurchase: (id: string, purchase: Partial<GoldPurchase>) => Promise<void>;
   deleteGoldPurchase: (id: string) => Promise<void>;
 
+  addChitFund: (fund: Omit<ChitFund, 'id' | 'createdAt'>) => Promise<void>;
+  updateChitFund: (id: string, fund: Partial<ChitFund>) => Promise<void>;
+  deleteChitFund: (id: string) => Promise<void>;
+
+  addChitInstallment: (inst: Omit<ChitInstallment, 'id' | 'createdAt'>) => Promise<void>;
+  updateChitInstallment: (id: string, inst: Partial<ChitInstallment>) => Promise<void>;
+  deleteChitInstallment: (id: string) => Promise<void>;
+
   updateSettings: (settings: Partial<AppSettings>) => Promise<void>;
 }
 
@@ -57,6 +67,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
   goals: [],
   budgets: [],
   goldPurchases: [],
+  chitFunds: [],
+  chitInstallments: [],
   settings: DEFAULT_SETTINGS,
   isLoading: false,
   rateJustUpdated: false,
@@ -65,12 +77,14 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   initialize: async () => {
     set({ isLoading: true });
-    const [expenses, incomes, goals, budgets, goldPurchases, settings] = await Promise.all([
+    const [expenses, incomes, goals, budgets, goldPurchases, chitFunds, chitInstallments, settings] = await Promise.all([
       supabase.from('expenses').select('*').order('createdAt', { ascending: false }),
       supabase.from('incomes').select('*').order('createdAt', { ascending: false }),
       supabase.from('goals').select('*').order('createdAt', { ascending: false }),
       supabase.from('budgets').select('*'),
       supabase.from('gold_purchases').select('*').order('createdAt', { ascending: false }),
+      supabase.from('chit_funds').select('*').order('createdAt', { ascending: false }),
+      supabase.from('chit_installments').select('*').order('month_no', { ascending: true }),
       supabase.from('settings').select('*').maybeSingle(),
     ]);
     set({
@@ -79,6 +93,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
       goals: goals.data ?? [],
       budgets: budgets.data ?? [],
       goldPurchases: goldPurchases.data ?? [],
+      chitFunds: chitFunds.data ?? [],
+      chitInstallments: chitInstallments.data ?? [],
       settings: settings.data ?? DEFAULT_SETTINGS,
       isLoading: false,
     });
@@ -90,6 +106,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
     goals: [],
     budgets: [],
     goldPurchases: [],
+    chitFunds: [],
+    chitInstallments: [],
     settings: DEFAULT_SETTINGS,
   }),
 
@@ -167,6 +185,37 @@ export const useAppStore = create<AppState>()((set, get) => ({
     await supabase.from('gold_purchases').delete().eq('id', id);
   },
 
+  addChitFund: async (fund) => {
+    const newFund: ChitFund = { ...fund, id: generateId(), createdAt: new Date().toISOString() };
+    set((s) => ({ chitFunds: [newFund, ...s.chitFunds] }));
+    await supabase.from('chit_funds').insert({ ...newFund, user_id: await getUid() });
+  },
+  updateChitFund: async (id, fund) => {
+    set((s) => ({ chitFunds: s.chitFunds.map((c) => (c.id === id ? { ...c, ...fund } : c)) }));
+    await supabase.from('chit_funds').update(fund).eq('id', id);
+  },
+  deleteChitFund: async (id) => {
+    set((s) => ({
+      chitFunds: s.chitFunds.filter((c) => c.id !== id),
+      chitInstallments: s.chitInstallments.filter((i) => i.chit_id !== id),
+    }));
+    await supabase.from('chit_funds').delete().eq('id', id);
+  },
+
+  addChitInstallment: async (inst) => {
+    const newInst: ChitInstallment = { ...inst, id: generateId(), createdAt: new Date().toISOString() };
+    set((s) => ({ chitInstallments: [...s.chitInstallments, newInst] }));
+    await supabase.from('chit_installments').insert({ ...newInst, user_id: await getUid() });
+  },
+  updateChitInstallment: async (id, inst) => {
+    set((s) => ({ chitInstallments: s.chitInstallments.map((i) => (i.id === id ? { ...i, ...inst } : i)) }));
+    await supabase.from('chit_installments').update(inst).eq('id', id);
+  },
+  deleteChitInstallment: async (id) => {
+    set((s) => ({ chitInstallments: s.chitInstallments.filter((i) => i.id !== id) }));
+    await supabase.from('chit_installments').delete().eq('id', id);
+  },
+
   updateSettings: async (settings) => {
     const merged = { ...get().settings, ...settings };
     set({ settings: merged });
@@ -183,3 +232,5 @@ export const useIncomes = () => useAppStore((s) => s.incomes);
 export const useGoals = () => useAppStore((s) => s.goals);
 export const useBudgets = () => useAppStore((s) => s.budgets);
 export const useGoldPurchases = () => useAppStore((s) => s.goldPurchases);
+export const useChitFunds = () => useAppStore((s) => s.chitFunds);
+export const useChitInstallments = () => useAppStore((s) => s.chitInstallments);

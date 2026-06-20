@@ -3,7 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard, CreditCard, TrendingUp, Target, Gem, BarChart3,
   Wallet, Download, Sun, Moon, Calculator, Palmtree, Settings, Menu, X,
-  ChevronRight, User, LogOut,
+  ChevronRight, User, LogOut, IndianRupee,
 } from 'lucide-react';
 import { useAppStore, useSettings } from '../../stores/useAppStore';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -18,6 +18,7 @@ const navItems = [
   { to: '/budget', icon: Wallet, label: 'Budget Planner' },
   { to: '/converter', icon: Calculator, label: 'AED → INR' },
   { to: '/dubai-life', icon: Palmtree, label: 'Dubai Life' },
+  { to: '/chit-funds', icon: IndianRupee, label: 'Chit Funds' },
   { to: '/reports', icon: Download, label: 'Reports' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];

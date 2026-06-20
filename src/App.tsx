@@ -12,6 +12,7 @@ import Converter from './pages/Converter';
 import DubaiLife from './pages/DubaiLife';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import ChitFunds from './pages/ChitFund';
 import Auth from './pages/Auth';
 import { useAppStore, useSettings } from './stores/useAppStore';
 import { useAuthStore } from './stores/useAuthStore';
@@ -57,6 +58,7 @@ function AppContent() {
         <Route path="/dubai-life" element={<DubaiLife />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/chit-funds" element={<ChitFunds />} />
       </Route>
     </Routes>
   );
