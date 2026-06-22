@@ -108,10 +108,10 @@ export default function Analytics() {
       {/* Spending warnings */}
       {showOverBudget && (
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30">
-          <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+          <AlertTriangle size={16} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
           <div>
-            <div className="text-sm font-semibold text-red-400">Expenses exceed income this month!</div>
-            <div className="text-xs text-red-300/80 mt-0.5">
+            <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income this month!</div>
+            <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
               Spent AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{(currentMonthExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {currentMonthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Review your spending categories below.
             </div>
           </div>
@@ -119,10 +119,10 @@ export default function Analytics() {
       )}
       {showHighSpending && (
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30">
-          <AlertTriangle size={16} className="text-yellow-400 shrink-0 mt-0.5" />
+          <AlertTriangle size={16} className="text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
           <div>
-            <div className="text-sm font-semibold text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
-            <div className="text-xs text-yellow-300/80 mt-0.5">
+            <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
+            <div className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
               AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{(currentMonthExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(currentMonthIncome - currentMonthExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} left this month.
             </div>
           </div>
@@ -139,7 +139,7 @@ export default function Analytics() {
         <div className="grid grid-cols-2 gap-4">
           <div className="rounded-xl bg-red-500/5 border border-red-500/15 px-4 py-3">
             <div className="text-xs text-muted mb-1">Expenses Today</div>
-            <div className="text-lg font-bold text-red-400">
+            <div className="text-lg font-bold text-red-600 dark:text-red-400">
               AED {todayExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
             </div>
             <div className="text-xs text-muted mt-0.5">
@@ -148,7 +148,7 @@ export default function Analytics() {
           </div>
           <div className="rounded-xl bg-green-500/5 border border-green-500/15 px-4 py-3">
             <div className="text-xs text-muted mb-1">Income Today</div>
-            <div className="text-lg font-bold text-green-400">
+            <div className="text-lg font-bold text-green-600 dark:text-green-400">
               AED {todayIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
             </div>
             <div className="text-xs text-muted mt-0.5">
@@ -163,7 +163,7 @@ export default function Analytics() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {bestSavingMonth && (
             <div className="card bg-green-500/5 border-green-500/20">
-              <div className="text-xs text-green-400 font-medium mb-1">🏆 Best Saving Month</div>
+              <div className="text-xs text-green-700 dark:text-green-400 font-medium mb-1">🏆 Best Saving Month</div>
               <div className="text-primary font-bold">{getMonthLabel(bestSavingMonth.month)}</div>
               <div className="text-sm text-muted">AED {bestSavingMonth.savings.toLocaleString('en-AE', { maximumFractionDigits: 0 })} saved</div>
               <div className="text-xs text-muted mt-0.5">≈ ₹{(bestSavingMonth.savings * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
@@ -171,7 +171,7 @@ export default function Analytics() {
           )}
           {worstSpendingMonth && (
             <div className="card bg-red-500/5 border-red-500/20">
-              <div className="text-xs text-red-400 font-medium mb-1">📊 Highest Spending Month</div>
+              <div className="text-xs text-red-700 dark:text-red-400 font-medium mb-1">📊 Highest Spending Month</div>
               <div className="text-primary font-bold">{getMonthLabel(worstSpendingMonth.month)}</div>
               <div className="text-sm text-muted">AED {worstSpendingMonth.expenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent</div>
               <div className="text-xs text-muted mt-0.5">≈ ₹{(worstSpendingMonth.expenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>

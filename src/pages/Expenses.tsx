@@ -96,10 +96,10 @@ export default function Expenses() {
       {/* Spending warnings */}
       {showOverBudget && (
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30">
-          <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
+          <AlertTriangle size={16} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
           <div>
-            <div className="text-sm font-semibold text-red-400">Expenses exceed income this month!</div>
-            <div className="text-xs text-red-300/80 mt-0.5">
+            <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income this month!</div>
+            <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
               Spent AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{(monthlyExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {monthlyIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
             </div>
           </div>
@@ -107,10 +107,10 @@ export default function Expenses() {
       )}
       {showHighSpending && (
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30">
-          <AlertTriangle size={16} className="text-yellow-400 shrink-0 mt-0.5" />
+          <AlertTriangle size={16} className="text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
           <div>
-            <div className="text-sm font-semibold text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
-            <div className="text-xs text-yellow-300/80 mt-0.5">
+            <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
+            <div className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
               AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{(monthlyExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(monthlyIncome - monthlyExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} remaining this month.
             </div>
           </div>

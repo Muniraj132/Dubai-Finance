@@ -98,9 +98,9 @@ export default function BudgetPlanner() {
                   </div>
                   <div className="text-right">
                     <div className={`text-xs font-medium px-2 py-1 rounded-full ${
-                      isOver ? 'bg-red-500/15 text-red-400' :
-                      isNear ? 'bg-yellow-500/15 text-yellow-400' :
-                      'bg-green-500/15 text-green-400'
+                      isOver ? 'bg-red-500/15 text-red-700 dark:text-red-400' :
+                      isNear ? 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400' :
+                      'bg-green-500/15 text-green-700 dark:text-green-400'
                     }`}>
                       {statusLabel}
                     </div>
@@ -121,7 +121,7 @@ export default function BudgetPlanner() {
                   <span className="text-muted">
                     Spent: <span className="text-primary font-medium">AED {spent.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</span>
                   </span>
-                  <span className={remaining < 0 ? 'text-red-400 font-medium' : 'text-muted'}>
+                  <span className={remaining < 0 ? 'text-red-700 dark:text-red-400 font-medium' : 'text-muted'}>
                     {remaining < 0 ? `Over by AED ${Math.abs(remaining).toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : `AED ${remaining.toLocaleString('en-AE', { maximumFractionDigits: 0 })} left`}
                   </span>
                 </div>
