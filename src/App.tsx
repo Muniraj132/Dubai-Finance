@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Expenses from './pages/Expenses';
@@ -70,6 +71,7 @@ export default function App() {
     <BrowserRouter>
       <AppContent />
       <VercelAnalytics />
+      <SpeedInsights />
     </BrowserRouter>
   );
 }
