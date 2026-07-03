@@ -19,57 +19,76 @@ drop table if exists expenses;
 -- ============================================================
 
 create table expenses (
-  id          text primary key,
-  user_id     uuid not null references auth.users(id) on delete cascade,
-  date        text not null,
-  amount      numeric not null,
-  currency    text not null,
-  category    text not null,
-  notes       text default '',
-  "createdAt" text not null
+  id                 text primary key,
+  user_id            uuid not null references auth.users(id) on delete cascade,
+  date               text not null,
+  amount             numeric not null,
+  currency           text not null,
+  category           text not null,
+  notes              text default '',
+  "createdAt"        text not null,
+  -- Historical AED/INR snapshot, frozen using the rate in effect at create/update time.
+  -- Nullable so legacy rows (pre-migration) fall back to live conversion at read time.
+  "amountAed"        numeric,
+  "amountInr"        numeric,
+  "exchangeRateUsed" numeric
 );
 
 create table incomes (
-  id          text primary key,
-  user_id     uuid not null references auth.users(id) on delete cascade,
-  date        text not null,
-  amount      numeric not null,
-  currency    text not null,
-  source      text not null,
-  notes       text default '',
-  "createdAt" text not null
+  id                 text primary key,
+  user_id            uuid not null references auth.users(id) on delete cascade,
+  date               text not null,
+  amount             numeric not null,
+  currency           text not null,
+  source             text not null,
+  notes              text default '',
+  "createdAt"        text not null,
+  "amountAed"        numeric,
+  "amountInr"        numeric,
+  "exchangeRateUsed" numeric
 );
 
 create table goals (
-  id              text primary key,
-  user_id         uuid not null references auth.users(id) on delete cascade,
-  name            text not null,
-  "targetAmount"  numeric not null,
-  "currentAmount" numeric not null default 0,
-  "targetDate"    text not null,
-  currency        text not null,
-  color           text not null,
-  "createdAt"     text not null
+  id                   text primary key,
+  user_id              uuid not null references auth.users(id) on delete cascade,
+  name                 text not null,
+  "targetAmount"       numeric not null,
+  "currentAmount"      numeric not null default 0,
+  "targetDate"         text not null,
+  currency             text not null,
+  color                text not null,
+  "createdAt"          text not null,
+  "targetAmountAed"    numeric,
+  "targetAmountInr"    numeric,
+  "currentAmountAed"   numeric,
+  "currentAmountInr"   numeric,
+  "exchangeRateUsed"   numeric
 );
 
 create table budgets (
-  id       text primary key,
-  user_id  uuid not null references auth.users(id) on delete cascade,
-  month    text not null,
-  category text not null,
-  amount   numeric not null,
-  currency text not null
+  id                 text primary key,
+  user_id            uuid not null references auth.users(id) on delete cascade,
+  month              text not null,
+  category           text not null,
+  amount             numeric not null,
+  currency           text not null,
+  "amountAed"        numeric,
+  "amountInr"        numeric,
+  "exchangeRateUsed" numeric
 );
 
 create table gold_purchases (
-  id             text primary key,
-  user_id        uuid not null references auth.users(id) on delete cascade,
-  date           text not null,
-  "weightGrams"  numeric not null,
-  "pricePerGram" numeric not null,
-  currency       text not null,
-  notes          text default '',
-  "createdAt"    text not null
+  id                 text primary key,
+  user_id            uuid not null references auth.users(id) on delete cascade,
+  date               text not null,
+  "weightGrams"      numeric not null,
+  "pricePerGram"     numeric not null,
+  currency           text not null,
+  notes              text default '',
+  "createdAt"        text not null,
+  "totalValueAed"    numeric,
+  "totalValueInr"    numeric,
+  "exchangeRateUsed" numeric
 );
 
 -- One settings row per user (user_id is the primary key)

@@ -3,7 +3,7 @@ import { Plus, Wallet } from 'lucide-react';
 import { useAppStore, useBudgets, useExpenses, useSettings } from '../stores/useAppStore';
 import { ExpenseCategory, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, EmptyState } from '../components/ui';
-import { EXPENSE_CATEGORIES, CATEGORY_COLORS, getCurrentMonthKey, getMonthKey, convertToAED } from '../utils';
+import { EXPENSE_CATEGORIES, CATEGORY_COLORS, getCurrentMonthKey, getMonthKey, resolveAed } from '../utils';
 
 export default function BudgetPlanner() {
   const budgets = useBudgets();
@@ -23,7 +23,7 @@ export default function BudgetPlanner() {
   const monthExpenses = useMemo(() => {
     const map = new Map<string, number>();
     expenses.filter(e => getMonthKey(e.date) === selectedMonth).forEach(e => {
-      const amt = convertToAED(e.amount, e.currency, settings.aedToInrRate);
+      const amt = resolveAed(e.amount, e.currency, e.amountAed, settings.aedToInrRate);
       map.set(e.category, (map.get(e.category) ?? 0) + amt);
     });
     return map;
@@ -47,7 +47,7 @@ export default function BudgetPlanner() {
     return list;
   }, []);
 
-  const totalBudget = monthBudgets.reduce((s, b) => s + (b.currency === 'AED' ? b.amount : b.amount / settings.aedToInrRate), 0);
+  const totalBudget = monthBudgets.reduce((s, b) => s + resolveAed(b.amount, b.currency, b.amountAed, settings.aedToInrRate), 0);
   const totalSpent = Array.from(monthExpenses.values()).reduce((s, v) => s + v, 0);
 
   return (
@@ -73,7 +73,7 @@ export default function BudgetPlanner() {
       ) : (
         <div className="space-y-3">
           {monthBudgets.map(budget => {
-            const budgetAED = budget.currency === 'AED' ? budget.amount : budget.amount / settings.aedToInrRate;
+            const budgetAED = resolveAed(budget.amount, budget.currency, budget.amountAed, settings.aedToInrRate);
             const spent = monthExpenses.get(budget.category) ?? 0;
             const pct = budgetAED > 0 ? (spent / budgetAED) * 100 : 0;
             const remaining = budgetAED - spent;

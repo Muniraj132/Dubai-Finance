@@ -2,29 +2,32 @@ import { useMemo } from 'react';
 import { AlertTriangle, CalendarDays } from 'lucide-react';
 import { useExpenses, useIncomes, useSettings } from '../stores/useAppStore';
 import { PageHeader } from '../components/ui';
-import { computeMonthlyStats, getMonthLabel, CATEGORY_COLORS, convertToAED, getCurrentMonthKey, getMonthKey } from '../utils';
+import { computeMonthlyStats, getMonthLabel, CATEGORY_COLORS, resolveAed, resolveInr, getCurrentMonthKey, getMonthKey } from '../utils';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from 'recharts';
 
-const CustomTooltip = ({ active, payload, label, aedToInrRate }: any) => {
+const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-card-border rounded-xl px-4 py-3 shadow-xl text-xs">
       <div className="text-muted mb-1.5">{label}</div>
-      {payload.map((p: any) => (
-        <div key={p.name} className="mb-1">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-            <span className="text-primary capitalize">{p.name}:</span>
-            <span className="font-semibold text-primary">AED {typeof p.value === 'number' ? p.value.toLocaleString('en-AE', { maximumFractionDigits: 0 }) : p.value}</span>
+      {payload.map((p: any) => {
+        const inrValue = p.payload?.[`${p.dataKey}Inr`];
+        return (
+          <div key={p.name} className="mb-1">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+              <span className="text-primary capitalize">{p.name}:</span>
+              <span className="font-semibold text-primary">AED {typeof p.value === 'number' ? p.value.toLocaleString('en-AE', { maximumFractionDigits: 0 }) : p.value}</span>
+            </div>
+            {typeof inrValue === 'number' && (
+              <div className="text-muted ml-4">≈ ₹{inrValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+            )}
           </div>
-          {typeof p.value === 'number' && aedToInrRate > 0 && (
-            <div className="text-muted ml-4">≈ ₹{(p.value * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -42,29 +45,47 @@ export default function Analytics() {
     income: Math.round(s.income),
     expenses: Math.round(s.expenses),
     savings: Math.round(s.savings),
+    incomeInr: Math.round(s.incomeInr),
+    expensesInr: Math.round(s.expensesInr),
+    savingsInr: Math.round(s.savingsInr),
   }));
 
   // Today's summary
   const todayExpenses = useMemo(() =>
     expenses.filter(e => e.date === today)
-      .reduce((s, e) => s + convertToAED(e.amount, e.currency, aedToInrRate), 0),
+      .reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
+    [expenses, today, aedToInrRate]
+  );
+  const todayExpensesInr = useMemo(() =>
+    expenses.filter(e => e.date === today)
+      .reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
     [expenses, today, aedToInrRate]
   );
   const todayIncome = useMemo(() =>
     incomes.filter(i => i.date === today)
-      .reduce((s, i) => s + convertToAED(i.amount, i.currency, aedToInrRate), 0),
+      .reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
+    [incomes, today, aedToInrRate]
+  );
+  const todayIncomeInr = useMemo(() =>
+    incomes.filter(i => i.date === today)
+      .reduce((s, i) => s + resolveInr(i.amount, i.currency, i.amountInr, aedToInrRate), 0),
     [incomes, today, aedToInrRate]
   );
 
   // Current month totals for spending warning
   const currentMonthExpenses = useMemo(() =>
     expenses.filter(e => getMonthKey(e.date) === currentMonth)
-      .reduce((s, e) => s + convertToAED(e.amount, e.currency, aedToInrRate), 0),
+      .reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
+    [expenses, currentMonth, aedToInrRate]
+  );
+  const currentMonthExpensesInr = useMemo(() =>
+    expenses.filter(e => getMonthKey(e.date) === currentMonth)
+      .reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
     [expenses, currentMonth, aedToInrRate]
   );
   const currentMonthIncome = useMemo(() =>
     incomes.filter(i => getMonthKey(i.date) === currentMonth)
-      .reduce((s, i) => s + convertToAED(i.amount, i.currency, aedToInrRate), 0),
+      .reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
     [incomes, currentMonth, aedToInrRate]
   );
   const spendingRatio = currentMonthIncome > 0 ? currentMonthExpenses / currentMonthIncome : 0;
@@ -72,24 +93,28 @@ export default function Analytics() {
   const showHighSpending = currentMonthIncome > 0 && spendingRatio >= 0.8 && spendingRatio < 1;
 
   const categoryData = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, { value: number; valueInr: number }>();
     expenses.forEach(e => {
-      const amt = convertToAED(e.amount, e.currency, aedToInrRate);
-      map.set(e.category, (map.get(e.category) ?? 0) + amt);
+      const amt = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+      const amtInr = resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate);
+      const prev = map.get(e.category) ?? { value: 0, valueInr: 0 };
+      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amtInr });
     });
     return Array.from(map.entries())
-      .map(([name, value]) => ({ name, value: Math.round(value) }))
+      .map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
       .sort((a, b) => b.value - a.value);
   }, [expenses, aedToInrRate]);
 
   const currentMonthCategoryData = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, { value: number; valueInr: number }>();
     expenses.filter(e => getMonthKey(e.date) === currentMonth).forEach(e => {
-      const amt = convertToAED(e.amount, e.currency, aedToInrRate);
-      map.set(e.category, (map.get(e.category) ?? 0) + amt);
+      const amt = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+      const amtInr = resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate);
+      const prev = map.get(e.category) ?? { value: 0, valueInr: 0 };
+      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amtInr });
     });
     return Array.from(map.entries())
-      .map(([name, value]) => ({ name, value: Math.round(value) }))
+      .map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
       .sort((a, b) => b.value - a.value);
   }, [expenses, currentMonth, aedToInrRate]);
 
@@ -112,7 +137,7 @@ export default function Analytics() {
           <div>
             <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income this month!</div>
             <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
-              Spent AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{(currentMonthExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {currentMonthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Review your spending categories below.
+              Spent AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {currentMonthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Review your spending categories below.
             </div>
           </div>
         </div>
@@ -123,7 +148,7 @@ export default function Analytics() {
           <div>
             <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
             <div className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
-              AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{(currentMonthExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(currentMonthIncome - currentMonthExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} left this month.
+              AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(currentMonthIncome - currentMonthExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} left this month.
             </div>
           </div>
         </div>
@@ -143,7 +168,7 @@ export default function Analytics() {
               AED {todayExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
             </div>
             <div className="text-xs text-muted mt-0.5">
-              ≈ ₹{(todayExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              ≈ ₹{todayExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
           </div>
           <div className="rounded-xl bg-green-500/5 border border-green-500/15 px-4 py-3">
@@ -152,7 +177,7 @@ export default function Analytics() {
               AED {todayIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
             </div>
             <div className="text-xs text-muted mt-0.5">
-              ≈ ₹{(todayIncome * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              ≈ ₹{todayIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
           </div>
         </div>
@@ -166,7 +191,7 @@ export default function Analytics() {
               <div className="text-xs text-green-700 dark:text-green-400 font-medium mb-1">🏆 Best Saving Month</div>
               <div className="text-primary font-bold">{getMonthLabel(bestSavingMonth.month)}</div>
               <div className="text-sm text-muted">AED {bestSavingMonth.savings.toLocaleString('en-AE', { maximumFractionDigits: 0 })} saved</div>
-              <div className="text-xs text-muted mt-0.5">≈ ₹{(bestSavingMonth.savings * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <div className="text-xs text-muted mt-0.5">≈ ₹{bestSavingMonth.savingsInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
             </div>
           )}
           {worstSpendingMonth && (
@@ -174,7 +199,7 @@ export default function Analytics() {
               <div className="text-xs text-red-700 dark:text-red-400 font-medium mb-1">📊 Highest Spending Month</div>
               <div className="text-primary font-bold">{getMonthLabel(worstSpendingMonth.month)}</div>
               <div className="text-sm text-muted">AED {worstSpendingMonth.expenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent</div>
-              <div className="text-xs text-muted mt-0.5">≈ ₹{(worstSpendingMonth.expenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <div className="text-xs text-muted mt-0.5">≈ ₹{worstSpendingMonth.expensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
             </div>
           )}
         </div>
@@ -191,7 +216,7 @@ export default function Analytics() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={55} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-              <Tooltip content={<CustomTooltip aedToInrRate={aedToInrRate} />} />
+              <Tooltip content={<CustomTooltip />} />
               <Line type="monotone" dataKey="income" stroke="#22c55e" strokeWidth={2} dot={{ fill: '#22c55e', r: 3 }} name="income" />
               <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} dot={{ fill: '#ef4444', r: 3 }} name="expenses" />
               <Line type="monotone" dataKey="savings" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} strokeDasharray="4 2" name="savings" />
@@ -206,7 +231,7 @@ export default function Analytics() {
           <h2 className="text-sm font-semibold text-primary mb-1">This Month — by Category</h2>
           <div className="text-xs text-muted mb-4">
             Total: AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
-          <span className="ml-2 text-[#A6445D]">≈ ₹{(currentMonthExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+          <span className="ml-2 text-[#A6445D]">≈ ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
           </div>
           {currentMonthCategoryData.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-muted text-sm">No expenses this month.</div>
@@ -219,7 +244,7 @@ export default function Analytics() {
                       <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] ?? '#78716c'} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number) => [`AED ${v.toLocaleString()} · ₹${(v * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, '']} />
+                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`AED ${v.toLocaleString()} · ₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, '']} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-1.5 mt-2">
@@ -231,7 +256,7 @@ export default function Analytics() {
                     </div>
                     <div className="text-right">
                       <span className="text-primary font-medium">AED {cat.value.toLocaleString()}</span>
-                      <span className="text-muted ml-1.5">≈ ₹{(cat.value * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                      <span className="text-muted ml-1.5">≈ ₹{cat.valueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                     </div>
                   </div>
                 ))}
@@ -250,7 +275,7 @@ export default function Analytics() {
               <BarChart data={categoryData} layout="vertical">
                 <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={80} />
-                <Tooltip formatter={(v: number) => [`AED ${v.toLocaleString()} · ₹${(v * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, 'Total']} />
+                <Tooltip formatter={(v: number, _name: string, entry: any) => [`AED ${v.toLocaleString()} · ₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, 'Total']} />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {categoryData.map(entry => (
                     <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] ?? '#78716c'} />
@@ -273,7 +298,7 @@ export default function Analytics() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={55} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-              <Tooltip content={<CustomTooltip aedToInrRate={aedToInrRate} />} />
+              <Tooltip content={<CustomTooltip />} />
               <Bar dataKey="savings" fill="#3b82f6" radius={[4, 4, 0, 0]} name="savings">
                 {chartData.map((entry, i) => (
                   <Cell key={i} fill={entry.savings >= 0 ? '#3b82f6' : '#ef4444'} />

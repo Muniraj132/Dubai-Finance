@@ -35,29 +35,41 @@ export const convertToINR = (amount: number, currency: 'AED' | 'INR', rate: numb
   return amount * rate;
 };
 
+// Read-time accessors: prefer the AED/INR value frozen on the record at
+// create/update time. Only falls back to a live conversion for legacy rows
+// that predate this snapshot (stored value is null/undefined).
+export const resolveAed = (amount: number, currency: 'AED' | 'INR', stored: number | null | undefined, rate: number): number =>
+  stored ?? convertToAED(amount, currency, rate);
+
+export const resolveInr = (amount: number, currency: 'AED' | 'INR', stored: number | null | undefined, rate: number): number =>
+  stored ?? convertToINR(amount, currency, rate);
+
 export const computeMonthlyStats = (
   expenses: Expense[],
   incomes: Income[],
   rate: number
 ): MonthlyStats[] => {
   const monthMap = new Map<string, MonthlyStats>();
+  const emptyStats = (m: string): MonthlyStats => ({ month: m, income: 0, expenses: 0, savings: 0, incomeInr: 0, expensesInr: 0, savingsInr: 0 });
 
   incomes.forEach(inc => {
     const m = getMonthKey(inc.date);
-    if (!monthMap.has(m)) monthMap.set(m, { month: m, income: 0, expenses: 0, savings: 0 });
+    if (!monthMap.has(m)) monthMap.set(m, emptyStats(m));
     const s = monthMap.get(m)!;
-    s.income += convertToAED(inc.amount, inc.currency, rate);
+    s.income += resolveAed(inc.amount, inc.currency, inc.amountAed, rate);
+    s.incomeInr += resolveInr(inc.amount, inc.currency, inc.amountInr, rate);
   });
 
   expenses.forEach(exp => {
     const m = getMonthKey(exp.date);
-    if (!monthMap.has(m)) monthMap.set(m, { month: m, income: 0, expenses: 0, savings: 0 });
+    if (!monthMap.has(m)) monthMap.set(m, emptyStats(m));
     const s = monthMap.get(m)!;
-    s.expenses += convertToAED(exp.amount, exp.currency, rate);
+    s.expenses += resolveAed(exp.amount, exp.currency, exp.amountAed, rate);
+    s.expensesInr += resolveInr(exp.amount, exp.currency, exp.amountInr, rate);
   });
 
   return Array.from(monthMap.values())
-    .map(s => ({ ...s, savings: s.income - s.expenses }))
+    .map(s => ({ ...s, savings: s.income - s.expenses, savingsInr: s.incomeInr - s.expensesInr }))
     .sort((a, b) => a.month.localeCompare(b.month));
 };
 

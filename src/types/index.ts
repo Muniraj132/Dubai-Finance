@@ -24,6 +24,10 @@ export interface Expense {
   category: ExpenseCategory;
   notes: string;
   createdAt: string;
+  // AED/INR value of `amount`, frozen at create/update time. Null on legacy rows.
+  amountAed?: number | null;
+  amountInr?: number | null;
+  exchangeRateUsed?: number | null;
 }
 
 export interface Income {
@@ -34,6 +38,9 @@ export interface Income {
   source: IncomeSource;
   notes: string;
   createdAt: string;
+  amountAed?: number | null;
+  amountInr?: number | null;
+  exchangeRateUsed?: number | null;
 }
 
 export interface Goal {
@@ -45,6 +52,11 @@ export interface Goal {
   currency: Currency;
   color: string;
   createdAt: string;
+  targetAmountAed?: number | null;
+  targetAmountInr?: number | null;
+  currentAmountAed?: number | null;
+  currentAmountInr?: number | null;
+  exchangeRateUsed?: number | null;
 }
 
 export interface Budget {
@@ -53,6 +65,9 @@ export interface Budget {
   category: ExpenseCategory;
   amount: number;
   currency: Currency;
+  amountAed?: number | null;
+  amountInr?: number | null;
+  exchangeRateUsed?: number | null;
 }
 
 export interface GoldPurchase {
@@ -63,6 +78,10 @@ export interface GoldPurchase {
   currency: Currency;
   notes: string;
   createdAt: string;
+  // AED/INR value of weightGrams * pricePerGram, frozen at create/update time.
+  totalValueAed?: number | null;
+  totalValueInr?: number | null;
+  exchangeRateUsed?: number | null;
 }
 
 export interface AppSettings {
@@ -70,6 +89,9 @@ export interface AppSettings {
   dubaiArrivalDate: string;
   theme: 'light' | 'dark';
   currency: Currency;
+  // ISO timestamp of the last automatic exchange-rate fetch. Null on
+  // legacy rows/first run — treated as "always stale" by exchangeRate.ts.
+  rateFetchedAt?: string | null;
 }
 
 export interface MonthlyStats {
@@ -77,6 +99,9 @@ export interface MonthlyStats {
   income: number;
   expenses: number;
   savings: number;
+  incomeInr: number;
+  expensesInr: number;
+  savingsInr: number;
 }
 
 export type ChitStatus = 'active' | 'completed' | 'dropped';

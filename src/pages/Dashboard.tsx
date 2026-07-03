@@ -2,26 +2,29 @@ import { useMemo } from 'react';
 import { TrendingUp, TrendingDown, PiggyBank, Percent, ArrowRightLeft, AlertTriangle } from 'lucide-react';
 import { useExpenses, useIncomes, useSettings } from '../stores/useAppStore';
 import { StatCard } from '../components/ui';
-import { convertToAED, formatCurrency, getCurrentMonthKey, getMonthKey, getMonthLabel, computeMonthlyStats, CATEGORY_COLORS } from '../utils';
+import { resolveAed, resolveInr, formatCurrency, getCurrentMonthKey, getMonthKey, getMonthLabel, computeMonthlyStats, CATEGORY_COLORS } from '../utils';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 
-const CustomTooltip = ({ active, payload, label, aedToInrRate }: any) => {
+const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-card-border rounded-xl px-4 py-3 shadow-xl text-sm">
       <div className="text-muted mb-2">{label}</div>
-      {payload.map((p: any) => (
-        <div key={p.name} className="mb-1">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-            <span className="text-primary capitalize">{p.name}:</span>
-            <span className="font-semibold text-primary">AED {p.value?.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</span>
+      {payload.map((p: any) => {
+        const inrValue = p.payload?.[`${p.dataKey}Inr`];
+        return (
+          <div key={p.name} className="mb-1">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+              <span className="text-primary capitalize">{p.name}:</span>
+              <span className="font-semibold text-primary">AED {p.value?.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</span>
+            </div>
+            {typeof inrValue === 'number' && (
+              <div className="text-xs text-muted ml-4">≈ ₹{inrValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+            )}
           </div>
-          {typeof p.value === 'number' && aedToInrRate > 0 && (
-            <div className="text-xs text-muted ml-4">≈ ₹{(p.value * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -36,17 +39,28 @@ export default function Dashboard() {
 
   const monthExpenses = useMemo(() =>
     expenses.filter(e => getMonthKey(e.date) === currentMonth)
-      .reduce((sum, e) => sum + convertToAED(e.amount, e.currency, aedToInrRate), 0),
+      .reduce((sum, e) => sum + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
+    [expenses, currentMonth, aedToInrRate]
+  );
+  const monthExpensesInr = useMemo(() =>
+    expenses.filter(e => getMonthKey(e.date) === currentMonth)
+      .reduce((sum, e) => sum + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
     [expenses, currentMonth, aedToInrRate]
   );
 
   const monthIncome = useMemo(() =>
     incomes.filter(i => getMonthKey(i.date) === currentMonth)
-      .reduce((sum, i) => sum + convertToAED(i.amount, i.currency, aedToInrRate), 0),
+      .reduce((sum, i) => sum + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
+    [incomes, currentMonth, aedToInrRate]
+  );
+  const monthIncomeInr = useMemo(() =>
+    incomes.filter(i => getMonthKey(i.date) === currentMonth)
+      .reduce((sum, i) => sum + resolveInr(i.amount, i.currency, i.amountInr, aedToInrRate), 0),
     [incomes, currentMonth, aedToInrRate]
   );
 
   const monthSavings = monthIncome - monthExpenses;
+  const monthSavingsInr = monthIncomeInr - monthExpensesInr;
   const savingsRate = monthIncome > 0 ? (monthSavings / monthIncome) * 100 : 0;
 
   // Spending warnings
@@ -64,17 +78,22 @@ export default function Dashboard() {
     income: Math.round(s.income),
     expenses: Math.round(s.expenses),
     savings: Math.round(s.savings),
+    incomeInr: Math.round(s.incomeInr),
+    expensesInr: Math.round(s.expensesInr),
+    savingsInr: Math.round(s.savingsInr),
   }));
 
   const categoryData = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, { value: number; valueInr: number }>();
     expenses
       .filter(e => getMonthKey(e.date) === currentMonth)
       .forEach(e => {
-        const amt = convertToAED(e.amount, e.currency, aedToInrRate);
-        map.set(e.category, (map.get(e.category) ?? 0) + amt);
+        const amt = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+        const amtInr = resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate);
+        const prev = map.get(e.category) ?? { value: 0, valueInr: 0 };
+        map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amtInr });
       });
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value: Math.round(value) }))
+    return Array.from(map.entries()).map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
       .sort((a, b) => b.value - a.value);
   }, [expenses, currentMonth, aedToInrRate]);
 
@@ -92,7 +111,7 @@ export default function Dashboard() {
           <div>
             <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income this month!</div>
             <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
-              Spent AED {monthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{(monthExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {monthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
+              Spent AED {monthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{monthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {monthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
             </div>
           </div>
         </div>
@@ -103,7 +122,7 @@ export default function Dashboard() {
           <div>
             <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
             <div className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
-              AED {monthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{(monthExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(monthIncome - monthExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} remaining this month.
+              AED {monthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{monthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(monthIncome - monthExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} remaining this month.
             </div>
           </div>
         </div>
@@ -114,21 +133,21 @@ export default function Dashboard() {
         <StatCard
           title="Total Income"
           value={`AED ${monthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(monthIncome * aedToInrRate, 'INR')}`}
+          sub={`≈ ${formatCurrency(monthIncomeInr, 'INR')}`}
           icon={<TrendingUp size={16} />}
           color="green"
         />
         <StatCard
           title="Total Expenses"
           value={`AED ${monthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(monthExpenses * aedToInrRate, 'INR')}`}
+          sub={`≈ ${formatCurrency(monthExpensesInr, 'INR')}`}
           icon={<TrendingDown size={16} />}
           color="red"
         />
         <StatCard
           title="Savings"
           value={`AED ${monthSavings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(monthSavings * aedToInrRate, 'INR')}`}
+          sub={`≈ ${formatCurrency(monthSavingsInr, 'INR')}`}
           icon={<PiggyBank size={16} />}
           color="blue"
         />
@@ -192,7 +211,7 @@ export default function Dashboard() {
                       <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] ?? '#78716c'} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number) => [`AED ${v.toLocaleString()} · ₹${(v * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, '']} />
+                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`AED ${v.toLocaleString()} · ₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, '']} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-2 mt-2">
@@ -204,7 +223,7 @@ export default function Dashboard() {
                     </div>
                     <div className="text-right">
                       <div className="text-primary font-medium">AED {cat.value.toLocaleString()}</div>
-                      <div className="text-muted">≈ ₹{(cat.value * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                      <div className="text-muted">≈ ₹{cat.valueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
                     </div>
                   </div>
                 ))}
@@ -222,7 +241,8 @@ export default function Dashboard() {
         ) : (
           <div className="space-y-2">
             {expenses.slice(0, 5).map(exp => {
-              const inAED = convertToAED(exp.amount, exp.currency, aedToInrRate);
+              const inAED = resolveAed(exp.amount, exp.currency, exp.amountAed, aedToInrRate);
+              const inINR = resolveInr(exp.amount, exp.currency, exp.amountInr, aedToInrRate);
               return (
                 <div key={exp.id} className="flex items-center justify-between py-2 border-b border-card-border last:border-0">
                   <div className="flex items-center gap-3">
@@ -239,7 +259,7 @@ export default function Dashboard() {
                     <div className="text-sm font-semibold text-red-400">-{exp.currency} {exp.amount.toLocaleString()}</div>
                     <div className="text-xs text-muted">
                       {exp.currency === 'AED'
-                        ? `≈ ₹${(exp.amount * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                        ? `≈ ₹${inINR.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
                         : `≈ AED ${inAED.toLocaleString('en-AE', { maximumFractionDigits: 2 })}`}
                     </div>
                   </div>

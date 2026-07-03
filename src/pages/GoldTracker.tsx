@@ -3,7 +3,7 @@ import { Plus, Edit2, Trash2, Gem } from 'lucide-react';
 import { useAppStore, useGoldPurchases, useSettings } from '../stores/useAppStore';
 import { GoldPurchase, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState, StatCard } from '../components/ui';
-import { formatDate, formatCurrency } from '../utils';
+import { formatDate, formatCurrency, resolveAed, resolveInr } from '../utils';
 
 const defaultForm = (): Omit<GoldPurchase, 'id' | 'createdAt'> => ({
   date: new Date().toISOString().split('T')[0],
@@ -29,9 +29,13 @@ export default function GoldTracker() {
     const totalWeight = purchases.reduce((s, p) => s + p.weightGrams, 0);
     const totalValue = purchases.reduce((s, p) => {
       const value = p.weightGrams * p.pricePerGram;
-      return s + (p.currency === 'AED' ? value : value / settings.aedToInrRate);
+      return s + resolveAed(value, p.currency, p.totalValueAed, settings.aedToInrRate);
     }, 0);
-    return { totalWeight, totalValue };
+    const totalValueInr = purchases.reduce((s, p) => {
+      const value = p.weightGrams * p.pricePerGram;
+      return s + resolveInr(value, p.currency, p.totalValueInr, settings.aedToInrRate);
+    }, 0);
+    return { totalWeight, totalValue, totalValueInr };
   }, [purchases, settings.aedToInrRate]);
 
   const needMore = Math.max(0, GOLD_TARGET_GRAMS - stats.totalWeight);
@@ -71,7 +75,7 @@ export default function GoldTracker() {
         <StatCard
           title="Total Value"
           value={`AED ${stats.totalValue.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(stats.totalValue * settings.aedToInrRate, 'INR')}`}
+          sub={`≈ ${formatCurrency(stats.totalValueInr, 'INR')}`}
           icon={<Gem size={16} />}
           color="theme"
         />

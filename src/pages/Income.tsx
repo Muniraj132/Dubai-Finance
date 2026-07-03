@@ -3,7 +3,7 @@ import { Plus, Edit2, Trash2, TrendingUp, CircleCheck } from 'lucide-react';
 import { useAppStore, useIncomes, useSettings } from '../stores/useAppStore';
 import { Income, IncomeSource, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState } from '../components/ui';
-import { formatDate, getCurrentMonthKey, getMonthKey } from '../utils';
+import { formatDate, getCurrentMonthKey, getMonthKey, resolveAed } from '../utils';
 
 const SOURCES: IncomeSource[] = ['Salary', 'Bonus', 'Freelance', 'Others'];
 const SOURCE_COLORS: Record<string, string> = { Salary: '#22c55e', Bonus: '#f59e0b', Freelance: '#3b82f6', Others: '#8b5cf6' };
@@ -37,7 +37,7 @@ export default function IncomePage() {
     [incomes, filterMonth]
   );
 
-  const total = filtered.reduce((s, i) => s + (i.currency === 'AED' ? i.amount : i.amount / settings.aedToInrRate), 0);
+  const total = filtered.reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, settings.aedToInrRate), 0);
 
   const openAdd = () => { setForm(defaultForm()); setEditId(null); setModalOpen(true); };
   const openEdit = (inc: Income) => {

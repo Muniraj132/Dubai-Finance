@@ -3,7 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard, CreditCard, TrendingUp, Target, Gem, BarChart3,
   Wallet, Download, Sun, Moon, Calculator, Palmtree, Settings, Menu, X,
-  ChevronRight, User, LogOut, IndianRupee,
+  ChevronRight, User, LogOut, IndianRupee, AlertCircle,
 } from 'lucide-react';
 import { useAppStore, useSettings } from '../../stores/useAppStore';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -29,6 +29,8 @@ export default function Layout() {
   const updateSettings = useAppStore((s) => s.updateSettings);
   const rateJustUpdated = useAppStore((s) => s.rateJustUpdated);
   const setRateJustUpdated = useAppStore((s) => s.setRateJustUpdated);
+  const lastError = useAppStore((s) => s.lastError);
+  const clearError = useAppStore((s) => s.clearError);
   const { user, signOut } = useAuthStore();
 
   useEffect(() => {
@@ -36,6 +38,12 @@ export default function Layout() {
     const t = setTimeout(() => setRateJustUpdated(false), 4000);
     return () => clearTimeout(t);
   }, [rateJustUpdated, setRateJustUpdated]);
+
+  useEffect(() => {
+    if (!lastError) return;
+    const t = setTimeout(() => clearError(), 6000);
+    return () => clearTimeout(t);
+  }, [lastError, clearError]);
 
   const toggleTheme = () => updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' });
 
@@ -149,6 +157,15 @@ export default function Layout() {
           </button>
         </header>
 
+        {lastError && (
+          <div className="mx-4 mt-4 md:mx-6 lg:mx-8 px-4 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center justify-center gap-2">
+            <AlertCircle size={14} className="shrink-0" />
+            <span className="flex-1 text-center">{lastError}</span>
+            <button onClick={clearError} className="text-red-400 hover:text-red-300 shrink-0">
+              <X size={13} />
+            </button>
+          </div>
+        )}
         {rateJustUpdated && (
           <div className="mx-4 mt-4 md:mx-6 lg:mx-8 px-4 py-2.5 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-400 text-center">
             Exchange rate updated — 1 AED = ₹{settings.aedToInrRate}

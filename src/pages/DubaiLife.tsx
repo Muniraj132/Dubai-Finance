@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Palmtree, Calendar, TrendingUp, PiggyBank, Gem, Heart } from 'lucide-react';
 import { useExpenses, useIncomes, useGoldPurchases, useSettings } from '../stores/useAppStore';
 import { PageHeader, StatCard } from '../components/ui';
-import { convertToAED, formatCurrency, EXPENSE_CATEGORIES } from '../utils';
+import { resolveAed, resolveInr, formatCurrency, EXPENSE_CATEGORIES } from '../utils';
 
 export default function DubaiLife() {
   const expenses = useExpenses();
@@ -18,16 +18,25 @@ export default function DubaiLife() {
   }, [dubaiArrivalDate]);
 
   const totalEarnings = useMemo(() =>
-    incomes.reduce((s, i) => s + convertToAED(i.amount, i.currency, aedToInrRate), 0),
+    incomes.reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
+    [incomes, aedToInrRate]
+  );
+  const totalEarningsInr = useMemo(() =>
+    incomes.reduce((s, i) => s + resolveInr(i.amount, i.currency, i.amountInr, aedToInrRate), 0),
     [incomes, aedToInrRate]
   );
 
   const totalExpenses = useMemo(() =>
-    expenses.reduce((s, e) => s + convertToAED(e.amount, e.currency, aedToInrRate), 0),
+    expenses.reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
+    [expenses, aedToInrRate]
+  );
+  const totalExpensesInr = useMemo(() =>
+    expenses.reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
     [expenses, aedToInrRate]
   );
 
   const totalSavings = totalEarnings - totalExpenses;
+  const totalSavingsInr = totalEarningsInr - totalExpensesInr;
 
   const totalGoldGrams = useMemo(() =>
     goldPurchases.reduce((s, g) => s + g.weightGrams, 0),
@@ -37,20 +46,27 @@ export default function DubaiLife() {
   const totalGoldValue = useMemo(() =>
     goldPurchases.reduce((s, g) => {
       const val = g.weightGrams * g.pricePerGram;
-      return s + (g.currency === 'AED' ? val : val / aedToInrRate);
+      return s + resolveAed(val, g.currency, g.totalValueAed, aedToInrRate);
     }, 0),
     [goldPurchases, aedToInrRate]
   );
 
   const familySupport = useMemo(() =>
     expenses.filter(e => e.category === 'Family Support')
-      .reduce((s, e) => s + convertToAED(e.amount, e.currency, aedToInrRate), 0),
+      .reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
+    [expenses, aedToInrRate]
+  );
+  const familySupportInr = useMemo(() =>
+    expenses.filter(e => e.category === 'Family Support')
+      .reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
     [expenses, aedToInrRate]
   );
 
   const savingsRate = totalEarnings > 0 ? (totalSavings / totalEarnings) * 100 : 0;
   const dailyEarning = daysInDubai > 0 ? totalEarnings / daysInDubai : 0;
+  const dailyEarningInr = daysInDubai > 0 ? totalEarningsInr / daysInDubai : 0;
   const dailySaving = daysInDubai > 0 ? totalSavings / daysInDubai : 0;
+  const dailySavingInr = daysInDubai > 0 ? totalSavingsInr / daysInDubai : 0;
 
   const milestones = [
     { label: '1 Month', days: 30, done: daysInDubai >= 30 },
@@ -83,7 +99,7 @@ export default function DubaiLife() {
         <StatCard
           title="Total Earnings"
           value={`AED ${totalEarnings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(totalEarnings * aedToInrRate, 'INR')}`}
+          sub={`≈ ${formatCurrency(totalEarningsInr, 'INR')}`}
           icon={<TrendingUp size={16} />}
           color="green"
         />
@@ -104,7 +120,7 @@ export default function DubaiLife() {
         <StatCard
           title="Family Support"
           value={`AED ${familySupport.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(familySupport * aedToInrRate, 'INR')}`}
+          sub={`≈ ${formatCurrency(familySupportInr, 'INR')}`}
           icon={<Heart size={16} />}
           color="pink"
         />
@@ -115,12 +131,12 @@ export default function DubaiLife() {
         <div className="card text-center">
           <div className="text-xs text-muted mb-1">Daily Earning (avg)</div>
           <div className="text-xl font-bold text-green-400">AED {dailyEarning.toFixed(0)}</div>
-          <div className="text-xs text-muted">≈ ₹{(dailyEarning * aedToInrRate).toFixed(0)}/day</div>
+          <div className="text-xs text-muted">≈ ₹{dailyEarningInr.toFixed(0)}/day</div>
         </div>
         <div className="card text-center">
           <div className="text-xs text-muted mb-1">Daily Saving (avg)</div>
           <div className={`text-xl font-bold ${dailySaving >= 0 ? 'text-blue-400' : 'text-red-400'}`}>AED {dailySaving.toFixed(0)}</div>
-          <div className="text-xs text-muted">≈ ₹{(dailySaving * aedToInrRate).toFixed(0)}/day</div>
+          <div className="text-xs text-muted">≈ ₹{dailySavingInr.toFixed(0)}/day</div>
         </div>
       </div>
 

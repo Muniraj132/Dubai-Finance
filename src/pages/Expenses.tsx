@@ -3,7 +3,7 @@ import { Plus, Search, Edit2, Trash2, Filter, AlertTriangle } from 'lucide-react
 import { useAppStore, useExpenses, useSettings, useIncomes } from '../stores/useAppStore';
 import { Expense, ExpenseCategory, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState, Badge } from '../components/ui';
-import { EXPENSE_CATEGORIES, CATEGORY_COLORS, formatDate, getCurrentMonthKey, getMonthKey, generateId, convertToAED } from '../utils';
+import { EXPENSE_CATEGORIES, CATEGORY_COLORS, formatDate, getCurrentMonthKey, getMonthKey, resolveAed, resolveInr } from '../utils';
 
 const defaultForm = (): Omit<Expense, 'id' | 'createdAt'> => ({
   date: new Date().toISOString().split('T')[0],
@@ -42,20 +42,25 @@ export default function Expenses() {
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [expenses, filterMonth, filterCategory, search]);
 
-  const totalFiltered = filtered.reduce((s, e) => s + convertToAED(e.amount, e.currency, aedToInrRate), 0);
-  const totalFilteredINR = totalFiltered * aedToInrRate;
+  const totalFiltered = filtered.reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0);
+  const totalFilteredINR = filtered.reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0);
 
   // Spending warning for current month
   const currentMonth = getCurrentMonthKey();
   const monthlyExpenses = useMemo(() =>
     expenses.filter(e => getMonthKey(e.date) === currentMonth)
-      .reduce((s, e) => s + convertToAED(e.amount, e.currency, aedToInrRate), 0),
+      .reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
     [expenses, currentMonth, aedToInrRate]
   );
   const monthlyIncome = useMemo(() =>
     incomes.filter(i => getMonthKey(i.date) === currentMonth)
-      .reduce((s, i) => s + convertToAED(i.amount, i.currency, aedToInrRate), 0),
+      .reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
     [incomes, currentMonth, aedToInrRate]
+  );
+  const monthlyExpensesInr = useMemo(() =>
+    expenses.filter(e => getMonthKey(e.date) === currentMonth)
+      .reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
+    [expenses, currentMonth, aedToInrRate]
   );
   const spendingRatio = monthlyIncome > 0 ? monthlyExpenses / monthlyIncome : 0;
   const showOverBudget = filterMonth === currentMonth && monthlyIncome > 0 && spendingRatio >= 1;
@@ -100,7 +105,7 @@ export default function Expenses() {
           <div>
             <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income this month!</div>
             <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
-              Spent AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{(monthlyExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {monthlyIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
+              Spent AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{monthlyExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {monthlyIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
             </div>
           </div>
         </div>
@@ -111,7 +116,7 @@ export default function Expenses() {
           <div>
             <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
             <div className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
-              AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{(monthlyExpenses * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(monthlyIncome - monthlyExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} remaining this month.
+              AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{monthlyExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(monthlyIncome - monthlyExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} remaining this month.
             </div>
           </div>
         </div>
@@ -151,8 +156,8 @@ export default function Expenses() {
               </thead>
               <tbody className="divide-y divide-card-border">
                 {filtered.map(exp => {
-                  const inINR = exp.currency === 'AED' ? exp.amount * aedToInrRate : exp.amount;
-                  const inAED = exp.currency === 'INR' ? exp.amount / aedToInrRate : exp.amount;
+                  const inINR = resolveInr(exp.amount, exp.currency, exp.amountInr, aedToInrRate);
+                  const inAED = resolveAed(exp.amount, exp.currency, exp.amountAed, aedToInrRate);
                   return (
                     <tr key={exp.id} className="hover:bg-white/3 transition-colors group">
                       <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{formatDate(exp.date)}</td>
