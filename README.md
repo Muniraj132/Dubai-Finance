@@ -2,6 +2,8 @@
 
 A personal finance web application built for Indians working in Dubai. Track expenses in AED, convert to INR, monitor savings, and reach your financial goals.
 
+For a deep dive into how the app is built — data flow, database schema, the historical currency-snapshot system, and the business rules behind each feature — see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+
 ## Features
 
 - 📊 **Dashboard** — Monthly overview with income, expenses, savings, and AED→INR values
@@ -11,22 +13,35 @@ A personal finance web application built for Indians working in Dubai. Track exp
 - 🪙 **Gold Tracker** — Track gold purchases by grams, price, and value
 - 📈 **Analytics** — Charts for spending trends, category breakdowns, savings
 - 💼 **Budget Planner** — Monthly category budgets with Green/Yellow/Red alerts
-- 🔄 **AED → INR Converter** — Real-time conversion with configurable rate
+- 🔄 **AED → INR Converter** — Standalone calculator with configurable rate
 - 🌴 **Dubai Life** — Personal journey dashboard with milestones
-- 📥 **Reports** — Export expenses, income, goals to CSV
+- 🔗 **Chit Funds** — Track India-side chit fund installments and payouts
+- 📥 **Reports** — Export expenses, income, goals to CSV (includes frozen AED/INR values)
 - 🌙 **Dark/Light Mode** — Persisted theme preference
+- 🔒 **Accounts** — Email/password auth via Supabase; your data is private to your account
 
 ## Tech Stack
 
-- **React 19** + **TypeScript**
-- **Vite** (build tool)
+- **React 19** + **TypeScript**, built with **Vite**
 - **Tailwind CSS** (styling)
 - **Recharts** (charts)
 - **React Router v6** (routing)
 - **Zustand** (state management)
-- **localStorage** (data persistence)
+- **Supabase** (Postgres database + auth — this is the backend; there is no separate server in this repo)
 
 ## Getting Started
+
+Requires a Supabase project. Create `.env` in the project root:
+
+```bash
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your-anon-public-key
+```
+
+Then set up the database by running the SQL files in
+[`supabase/migrations/`](supabase/migrations) in order, via the Supabase
+Dashboard's SQL Editor (see [`supabase/README.md`](supabase/README.md) for
+the migration convention).
 
 ```bash
 # Install dependencies
@@ -45,35 +60,34 @@ npm run build
 2. Go to [vercel.com](https://vercel.com) → New Project
 3. Import your repository
 4. Framework: **Vite** (auto-detected)
-5. Deploy!
-
-No environment variables needed — all data is stored locally.
-
-## Deploy to Netlify
-
-1. `npm run build`
-2. Drag the `dist/` folder to [netlify.com/drop](https://netlify.com/drop)
+5. Add the two `VITE_SUPABASE_*` environment variables from above in the Vercel project settings
+6. Deploy!
 
 ## Project Structure
 
 ```
 src/
 ├── components/
-│   ├── layout/     # Layout with sidebar
-│   └── ui/         # Reusable components
-├── pages/          # Route pages
-├── stores/         # Zustand state management
+│   ├── layout/     # Sidebar layout + status banners
+│   └── ui/         # Reusable UI primitives
+├── pages/          # One file per route
+├── stores/         # Zustand state (auth + app data/CRUD)
 ├── types/          # TypeScript interfaces
-└── utils/          # Helper functions
+└── utils/          # Currency conversion, formatting, Supabase client, exchange-rate refresh
+supabase/
+└── migrations/     # SQL schema, applied in order — see supabase/README.md
 ```
 
 ## Data Storage
 
-All data is stored in **localStorage** under the key `dubai-finance-tracker`. No backend or account needed.
+All data lives in Supabase Postgres, scoped per-user via Row Level Security
+— each account only ever sees its own rows. Nothing is stored in
+localStorage.
 
 ## Default Settings
 
-- Exchange Rate: **1 AED = ₹23 INR** (configurable in Settings)
+- Exchange Rate: **1 AED = ₹23 INR** by default, auto-refreshed from a live
+  rate API roughly once a day, and manually overridable in Settings/Converter
 - Theme: Dark mode
 
 ---
