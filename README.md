@@ -11,12 +11,14 @@ For a deep dive into how the app is built — data flow, database schema, the hi
 - 💰 **Income Management** — Salary, bonus, freelance tracking
 - 🎯 **Goals** — Set and track financial goals with progress bars
 - 🪙 **Gold Tracker** — Track gold purchases by grams, price, and value
-- 📈 **Analytics** — Charts for spending trends, category breakdowns, savings
+- 📊 **Investments** — Track Mutual Funds, Stocks, ETFs, Fixed Deposits, PPF, NPS & more, with a Buy/SIP/Sell/Dividend transaction ledger per holding, free live NAV refresh for Mutual Funds (via mfapi.in/AMFI), and automatic recurring monthly SIP entries
+- 📈 **Analytics** — Charts for spending trends, category breakdowns, savings, and portfolio allocation
 - 💼 **Budget Planner** — Monthly category budgets with Green/Yellow/Red alerts
 - 🔄 **AED → INR Converter** — Standalone calculator with configurable rate
 - 🌴 **Dubai Life** — Personal journey dashboard with milestones
 - 🔗 **Chit Funds** — Track India-side chit fund installments and payouts
-- 📥 **Reports** — Export expenses, income, goals to CSV (includes frozen AED/INR values)
+- 💎 **Net Worth** — Assets-only net worth on the Dashboard (savings + gold + investments)
+- 📥 **Reports** — Export expenses, income, goals, investments & investment transactions to CSV (includes frozen AED/INR values)
 - 🌙 **Dark/Light Mode** — Persisted theme preference
 - 🔒 **Accounts** — Email/password auth via Supabase; your data is private to your account
 

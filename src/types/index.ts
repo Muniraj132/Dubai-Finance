@@ -135,3 +135,56 @@ export interface ChitInstallment {
   remark: string;
   createdAt: string;
 }
+
+export type InvestmentType = 'Mutual Fund' | 'Stock' | 'ETF' | 'Fixed Deposit' | 'PPF' | 'NPS' | 'Other';
+export type InvestmentStatus = 'active' | 'closed';
+export type InvestmentTxnType = 'Buy' | 'SIP' | 'Sell' | 'Dividend';
+
+export interface Investment {
+  id: string;
+  type: InvestmentType;
+  name: string;
+  currency: Currency;
+  // Manually-updated mark-to-market value, in `currency` — there's no live
+  // price feed in this app, so this is refreshed by the user periodically.
+  currentValue: number;
+  maturityDate: string | null; // Fixed Deposit / PPF / NPS
+  interestRate: number | null; // Fixed Deposit / PPF / NPS, annual %, informational only
+  // AMFI scheme code (from mfapi.in) — only set for type = 'Mutual Fund' holdings
+  // linked to live NAV refresh. Null for everything else (no live price source).
+  schemeCode: number | null;
+  // SIP (recurring monthly investment). When true, a database-side cron job
+  // (see supabase/migrations/0006_investment_sip.sql) auto-inserts a SIP
+  // transaction on sipDay of every month — this runs independent of whether
+  // the app is open. Turning sipEnabled off stops future auto-generated
+  // entries; it never deletes ones already created.
+  sipEnabled: boolean;
+  sipAmount: number | null; // in `currency`, required when sipEnabled
+  sipDay: number | null; // 1–28, required when sipEnabled
+  sipLastRunDate: string | null; // last date (YYYY-MM-DD) the cron job fired for this holding
+  status: InvestmentStatus;
+  notes: string;
+  createdAt: string;
+  // AED/INR value of currentValue, frozen at create/update time. Null on legacy rows.
+  currentValueAed?: number | null;
+  currentValueInr?: number | null;
+  exchangeRateUsed?: number | null;
+}
+
+export interface InvestmentTransaction {
+  id: string;
+  investment_id: string;
+  type: InvestmentTxnType;
+  date: string;
+  // units/pricePerUnit are null for Dividend and for FD/PPF/NPS transactions
+  // (Buy = deposit, SIP = recurring contribution, Sell = withdrawal there).
+  units: number | null;
+  pricePerUnit: number | null;
+  amount: number;
+  currency: Currency;
+  notes: string;
+  createdAt: string;
+  amountAed?: number | null;
+  amountInr?: number | null;
+  exchangeRateUsed?: number | null;
+}

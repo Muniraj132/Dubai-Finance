@@ -13,6 +13,7 @@ const Expenses = lazy(() => import('./pages/Expenses'));
 const Income = lazy(() => import('./pages/Income'));
 const Goals = lazy(() => import('./pages/Goals'));
 const GoldTracker = lazy(() => import('./pages/GoldTracker'));
+const Investments = lazy(() => import('./pages/Investments'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const BudgetPlanner = lazy(() => import('./pages/BudgetPlanner'));
 const Converter = lazy(() => import('./pages/Converter'));
@@ -65,6 +66,7 @@ function AppContent() {
           <Route path="/income" element={<Income />} />
           <Route path="/goals" element={<Goals />} />
           <Route path="/gold" element={<GoldTracker />} />
+          <Route path="/investments" element={<Investments />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/budget" element={<BudgetPlanner />} />
           <Route path="/converter" element={<Converter />} />

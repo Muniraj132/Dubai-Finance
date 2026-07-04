@@ -1,8 +1,11 @@
 import { useMemo } from 'react';
 import { AlertTriangle, CalendarDays } from 'lucide-react';
-import { useExpenses, useIncomes, useSettings } from '../stores/useAppStore';
+import { useExpenses, useIncomes, useInvestments, useInvestmentTransactions, useSettings } from '../stores/useAppStore';
 import { PageHeader } from '../components/ui';
-import { computeMonthlyStats, getMonthLabel, CATEGORY_COLORS, resolveAed, resolveInr, getCurrentMonthKey, getMonthKey } from '../utils';
+import {
+  computeMonthlyStats, computeInvestmentStats, getMonthLabel, CATEGORY_COLORS, INVESTMENT_TYPE_COLORS,
+  resolveAed, resolveInr, getCurrentMonthKey, getMonthKey,
+} from '../utils';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
@@ -35,6 +38,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export default function Analytics() {
   const expenses = useExpenses();
   const incomes = useIncomes();
+  const investments = useInvestments();
+  const investmentTransactions = useInvestmentTransactions();
   const { aedToInrRate } = useSettings();
   const currentMonth = getCurrentMonthKey();
   const today = new Date().toISOString().split('T')[0];
@@ -117,6 +122,26 @@ export default function Analytics() {
       .map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
       .sort((a, b) => b.value - a.value);
   }, [expenses, currentMonth, aedToInrRate]);
+
+  const portfolioAllocation = useMemo(() => {
+    const map = new Map<string, { value: number; valueInr: number }>();
+    investments.forEach(inv => {
+      const s = computeInvestmentStats(inv, investmentTransactions.filter(t => t.investment_id === inv.id), aedToInrRate);
+      const prev = map.get(inv.type) ?? { value: 0, valueInr: 0 };
+      map.set(inv.type, { value: prev.value + s.currentValueAed, valueInr: prev.valueInr + s.currentValueInr });
+    });
+    return Array.from(map.entries())
+      .map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
+      .sort((a, b) => b.value - a.value);
+  }, [investments, investmentTransactions, aedToInrRate]);
+
+  const investmentComparison = useMemo(() =>
+    investments.map(inv => {
+      const s = computeInvestmentStats(inv, investmentTransactions.filter(t => t.investment_id === inv.id), aedToInrRate);
+      return { name: inv.name, invested: Math.round(s.investedAed), current: Math.round(s.currentValueAed) };
+    }).sort((a, b) => b.current - a.current),
+    [investments, investmentTransactions, aedToInrRate]
+  );
 
   const bestSavingMonth = monthlyStats.length > 0
     ? monthlyStats.reduce((best, cur) => cur.savings > best.savings ? cur : best)
@@ -223,6 +248,60 @@ export default function Analytics() {
             </LineChart>
           </ResponsiveContainer>
         )}
+      </div>
+
+      {/* Portfolio */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="card">
+          <h2 className="text-sm font-semibold text-primary mb-4">Portfolio Allocation</h2>
+          {portfolioAllocation.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-muted text-sm text-center">No investments yet.</div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie data={portfolioAllocation} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={2}>
+                    {portfolioAllocation.map(entry => (
+                      <Cell key={entry.name} fill={INVESTMENT_TYPE_COLORS[entry.name] ?? '#78716c'} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`AED ${v.toLocaleString()} · ₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, '']} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-1.5 mt-2">
+                {portfolioAllocation.map(t => (
+                  <div key={t.name} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ background: INVESTMENT_TYPE_COLORS[t.name] ?? '#78716c' }} />
+                      <span className="text-muted">{t.name}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-primary font-medium">AED {t.value.toLocaleString()}</span>
+                      <span className="text-muted ml-1.5">≈ ₹{t.valueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="card">
+          <h2 className="text-sm font-semibold text-primary mb-4">Invested vs Current Value</h2>
+          {investmentComparison.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-muted text-sm">No investments yet.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(180, investmentComparison.length * 40)}>
+              <BarChart data={investmentComparison} layout="vertical">
+                <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={90} />
+                <Tooltip formatter={(v: number, name: string) => [`AED ${v.toLocaleString()}`, name === 'invested' ? 'Invested' : 'Current Value']} />
+                <Bar dataKey="invested" fill="#78716c" radius={[0, 4, 4, 0]} name="invested" />
+                <Bar dataKey="current" fill="#3b82f6" radius={[0, 4, 4, 0]} name="current" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

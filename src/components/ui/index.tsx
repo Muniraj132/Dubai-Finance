@@ -15,6 +15,10 @@ const colorMap: Record<string, { bg: string; text: string }> = {
   amber: { bg: 'bg-amber-500/15', text: 'text-amber-400' },
   pink: { bg: 'bg-pink-500/15', text: 'text-pink-400' },
   orange: { bg: 'bg-orange-500/15', text: 'text-orange-400' },
+  purple: { bg: 'bg-purple-500/15', text: 'text-purple-400' },
+  cyan: { bg: 'bg-cyan-500/15', text: 'text-cyan-400' },
+  indigo: { bg: 'bg-indigo-500/15', text: 'text-indigo-400' },
+  emerald: { bg: 'bg-emerald-500/15', text: 'text-emerald-400' },
 };
 
 // StatCard
@@ -99,8 +103,26 @@ export const Textarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement
 // Button
 type BtnVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 export const Button = ({
-  children, variant = 'primary', className = '', ...props
+  children, variant = 'primary', className = '', onClick, disabled, ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant }) => {
+  // Most onClick handlers in this app are async (they await a Supabase
+  // write before closing their modal — see useAppStore's writeThrough
+  // pattern). On a slow network that await can take a while, and without
+  // this guard the button stays clickable the whole time, so a fast
+  // double-click fires the handler twice and creates two records.
+  // Auto-detecting a Promise return and disabling for its duration fixes
+  // every Save/Add/Update button in the app from this one place.
+  const [pending, setPending] = useState(false);
+
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (pending) return;
+    const result = onClick?.(e) as unknown;
+    if (result && typeof (result as Promise<unknown>).then === 'function') {
+      setPending(true);
+      (result as Promise<unknown>).finally(() => setPending(false));
+    }
+  };
+
   const variants: Record<BtnVariant, string> = {
     primary: 'bg-[#A6445D] hover:bg-[#8A384C] text-white shadow-lg shadow-[#A6445D]/25',
     secondary: 'bg-white/10 hover:bg-white/15 text-primary border border-white/10',
@@ -110,6 +132,8 @@ export const Button = ({
   return (
     <button
       {...props}
+      onClick={handleClick}
+      disabled={disabled || pending}
       className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${variants[variant]} ${className}`}
     >
       {children}

@@ -13,11 +13,13 @@ should be here.
 
 A personal finance tracker for someone living/working in Dubai (AED) while
 their financial life partly stays in India (INR). It tracks expenses,
-income, savings goals, gold purchases, monthly budgets, and "chit funds" (a
-rotating-savings-and-credit scheme common in India — see §7.6), and
-presents everything in both currencies. Single-user-per-account: every table
-is scoped to `auth.uid()` via Postgres Row Level Security, so it's
-effectively "your own private ledger," not a shared household budget.
+income, savings goals, gold purchases, monthly budgets, investments (mutual
+funds, stocks, ETFs, fixed deposits, PPF, NPS, and other holdings — see
+§7.10), and "chit funds" (a rotating-savings-and-credit scheme common in
+India — see §7.6), and presents everything in both currencies.
+Single-user-per-account: every table is scoped to `auth.uid()` via Postgres
+Row Level Security, so it's effectively "your own private ledger," not a
+shared household budget.
 
 ## 2. Tech stack
 
@@ -55,7 +57,8 @@ src/
 └── utils/
     ├── index.ts             # Currency conversion, formatting, CSV export, misc helpers
     ├── supabase.ts           # Supabase client singleton
-    └── exchangeRate.ts       # Periodic AED→INR rate refresh (see §8)
+    ├── exchangeRate.ts       # Periodic AED→INR rate refresh (see §8)
+    └── mfNav.ts              # Live Mutual Fund NAV lookup via mfapi.in (see §7.10)
 supabase/
 ├── README.md                 # Migration convention docs
 └── migrations/                # Numbered SQL files — the source of truth for the schema (see §6)
@@ -79,7 +82,8 @@ bundles are fetched on demand instead of one large bundle. `Layout` and
 | `/income` | `Income.tsx` | CRUD list of income entries |
 | `/goals` | `Goals.tsx` | Savings goals with progress bars and a "contribute funds" flow |
 | `/gold` | `GoldTracker.tsx` | Gold purchases (grams + price/gram), progress toward a target weight |
-| `/analytics` | `Analytics.tsx` | Deeper charts: today's summary, best/worst months, all-time category breakdown |
+| `/investments` | `Investments.tsx` | Investment holdings (list + detail, like Chit Funds) and their Buy/SIP/Sell/Dividend transaction ledger |
+| `/analytics` | `Analytics.tsx` | Deeper charts: today's summary, best/worst months, all-time category breakdown, portfolio allocation |
 | `/budget` | `BudgetPlanner.tsx` | Per-category monthly budgets vs. actual spend, with over/near/on-track status |
 | `/converter` | `Converter.tsx` | Standalone AED⇄INR calculator + salary reference table (not tied to stored records) |
 | `/dubai-life` | `DubaiLife.tsx` | "Journey" dashboard: days in Dubai, lifetime totals, milestones, financial health score |
@@ -105,11 +109,12 @@ same browser would briefly see the previous user's cached state).
 ### 5.2 `useAppStore` (`src/stores/useAppStore.ts`)
 
 Holds every domain collection (`expenses`, `incomes`, `goals`, `budgets`,
-`goldPurchases`, `chitFunds`, `chitInstallments`, `settings`) plus
-`isLoading`, `rateJustUpdated`, and `lastError`.
+`goldPurchases`, `chitFunds`, `chitInstallments`, `investments`,
+`investmentTransactions`, `settings`) plus `isLoading`, `rateJustUpdated`,
+and `lastError`.
 
 **Boot sequence**: `initialize()` (called once in `App.tsx` when `user`
-becomes truthy) fires all 8 Supabase `select` queries in parallel via
+becomes truthy) fires all 10 Supabase `select` queries in parallel via
 `Promise.all` and populates the store. There is no pagination/streaming —
 the entire dataset for the signed-in user is loaded into memory up front.
 This is fine at personal-finance-tracker scale but wouldn't scale to a
@@ -164,6 +169,9 @@ files:
 - `0001_initial_schema.sql` — full schema for a fresh install (all tables + RLS policies).
 - `0002_historical_currency_snapshot.sql` — retrofits the AED/INR snapshot columns onto a pre-existing database.
 - `0003_add_rate_fetched_at.sql` — adds the column that drives periodic rate refresh (§8).
+- `0004_investments.sql` — adds `investments` + `investment_transactions` (§7.10).
+- `0005_investment_scheme_code.sql` — adds `investments."schemeCode"` for live Mutual Fund NAV refresh (§7.10).
+- `0006_investment_sip.sql` — adds SIP columns + a `pg_cron` job that auto-generates monthly SIP transactions (§7.10).
 
 ### Tables
 
@@ -181,6 +189,8 @@ for `all` operations — i.e., a user can only ever see/modify their own rows.
 | `settings` | **one row per user**, `user_id` is the primary key | `aedToInrRate` (default 23), `dubaiArrivalDate`, `theme`, `currency`, `rateFetchedAt` |
 | `chit_funds` | `name, total_amount, duration_months, organizer, start_date, end_date, status, received_amount, received_month_no, notes` | No `currency` column — always implicitly INR (see §7.6) |
 | `chit_installments` | `chit_id (FK), month_no, due_date, amount, paid_amount, paid_date, payment_mode, status, remark` | Indexed on `chit_id`; deleting a chit fund cascades to its installments (`on delete cascade`, also mirrored in the optimistic client-side delete) |
+| `investments` | `type, name, currency, currentValue, maturityDate, interestRate, schemeCode, sipEnabled, sipAmount, sipDay, sipLastRunDate, status, notes` + `currentValueAed/Inr, exchangeRateUsed` | `currentValue` is normally a manually-updated mark-to-market figure, *except* for Mutual Funds linked to an AMFI `schemeCode`, which can refresh it live (see §7.10); `maturityDate`/`interestRate` are only meaningful for Fixed Deposit/PPF/NPS; `sip*` columns drive the recurring-SIP cron job (see §7.10) — `sipLastRunDate` is server-maintained, never written by the client except as `null` on create |
+| `investment_transactions` | `investment_id (FK), type, date, units, pricePerUnit, amount, currency, notes` + `amountAed/Inr, exchangeRateUsed` | Indexed on `investment_id`; deleting an investment cascades to its transactions, same pattern as chit installments. `units`/`pricePerUnit` are null for Dividend and for Fixed Deposit/PPF/NPS transactions |
 
 **Column-naming quirk to know about**: columns are a mix of plain lowercase
 (`amount`, `currency`, `date`) and double-quoted camelCase (`"createdAt"`,
@@ -340,11 +350,12 @@ fair, else needs work).
 
 ### 7.8 Reports (CSV export)
 
-`Reports.tsx` exports expenses/income/goals to CSV via `exportToCSV` in
-`utils/index.ts` (builds a CSV string client-side, triggers a `Blob`
-download — no server round-trip). Each export includes both the raw
-`amount`/`currency` as entered *and* the resolved `AmountAED`/`AmountINR`
-columns, so exported data carries the same historical accuracy as the UI.
+`Reports.tsx` exports expenses/income/goals/investments/investment
+transactions to CSV via `exportToCSV` in `utils/index.ts` (builds a CSV
+string client-side, triggers a `Blob` download — no server round-trip).
+Each export includes both the raw `amount`/`currency` as entered *and* the
+resolved `AmountAED`/`AmountINR` columns, so exported data carries the same
+historical accuracy as the UI.
 
 ### 7.9 Converter & Settings
 
@@ -354,6 +365,127 @@ quick-amount buttons, a salary reference table) — it reads/writes
 is the manual-override surface for the same rate, plus the Dubai arrival
 date and theme. Both call `updateSettings` directly; neither goes through
 `exchangeRate.ts` (that's only for the automatic periodic refresh, §8).
+
+### 7.10 Investments
+
+`Investments.tsx` follows the exact same list/detail shape as Chit Funds
+(§7.6): a list view of holdings (`investments`) with portfolio-wide stat
+cards, and a detail view per holding showing its transaction ledger
+(`investment_transactions`), toggled by local `selectedId` state rather than
+a separate route.
+
+**Why two tables instead of one flat list like `gold_purchases`**: a gold
+purchase is a fully self-contained fact (weight × price = value). An
+investment isn't — a mutual fund position accumulates over many Buy/SIP
+transactions, and its value moves independently of those transactions (NAV
+changes even when you don't trade). So `investments` holds the "what do I
+own, what's it worth today" state, and `investment_transactions` holds the
+ledger of events that built it — the same parent (holding) / child (ledger)
+split as `chit_funds`/`chit_installments`.
+
+**`currentValue` is manually updated by default, not derived.** The "Update
+Value" quick action on the detail page (mirroring Chit Fund's "Pay" quick
+action) is the general-purpose way `currentValue` changes outside of
+creating the investment — this is the only mechanism for Stocks, ETFs,
+Fixed Deposits, PPF, and NPS, since there's no free live price source for
+any of those that's callable directly from a browser (see below). Every
+other figure — invested amount, units held, dividends received, gain/loss —
+is derived client-side from the transaction ledger by
+`computeInvestmentStats` / `computePortfolioStats` in `utils/index.ts`,
+never stored as a redundant running total.
+
+**Mutual Funds are the one exception: live NAV refresh via mfapi.in.**
+[mfapi.in](https://www.mfapi.in) wraps the official AMFI daily NAV data as
+free, CORS-open JSON — no API key, and (unlike e.g. Yahoo Finance's
+unofficial endpoints, which return no CORS headers and get silently blocked
+by the browser) it's directly `fetch()`-able from client code, the same way
+`exchangeRate.ts` calls the AED/INR rate API (§8). `src/utils/mfNav.ts`
+exposes two functions:
+- `searchMfSchemes(query)` — hits `/mf/search?q=...`, used by a debounced
+  autocomplete in the investment form so the user can find and link their
+  fund's AMFI scheme code (stored as `investments.schemeCode`). Only shown
+  when `type === 'Mutual Fund'`; a fund doesn't have to be linked — it's an
+  opt-in that unlocks the refresh action, not a requirement to add one.
+- `fetchLatestNav(schemeCode)` — hits `/mf/{schemeCode}`, returns the most
+  recent NAV entry.
+
+The "Refresh NAV" action (per-holding on the detail page, or "Refresh NAVs"
+in bulk from the list page, looping over every linked Mutual Fund) computes
+`currentValue = totalUnits × latestNav`, where `totalUnits` comes from
+`computeInvestmentStats` (the Buy/SIP/Sell ledger) and `latestNav` is always
+in INR (AMFI only prices Indian funds) — converted to AED via
+`convertToAED` first if the holding's `currency` is AED — then calls
+`updateInvestment` exactly like a manual edit would, so the usual
+`currentValueAed`/`currentValueInr`/`exchangeRateUsed` snapshot logic
+applies unchanged. If a fund has zero units held (no Buy/SIP recorded yet),
+refresh is a silent no-op rather than zeroing out whatever value was there.
+
+**The four transaction types cover both market and fixed-income
+instruments** by design: for Mutual Funds/Stocks/ETFs, `units`/`pricePerUnit`
+are set and Buy/SIP add to the unit count while Sell reduces it. For Fixed
+Deposits/PPF/NPS (no units), `units`/`pricePerUnit` are null and the same
+four types map onto real-world behavior instead: Buy = initial deposit, SIP
+= a recurring contribution (this is literally how PPF/NPS contributions
+work), Sell = withdrawal/premature closure, Dividend = interest credited.
+`Investment.maturityDate`/`interestRate` are informational-only fields shown
+for these fixed-income types, not used in any calculation.
+
+**Historical snapshot pattern (§7.1)** applies to both tables: every
+transaction's `amount` gets `amountAed`/`amountInr`/`exchangeRateUsed`
+frozen at create/amount-edit time, and `investments.currentValue` gets its
+own `currentValueAed`/`currentValueInr`/`exchangeRateUsed` snapshot,
+recomputed only when `currentValue` or `currency` changes — the same rule
+Goals apply to `currentAmount`.
+
+**Feeds Net Worth and other aggregates.** `Dashboard.tsx` computes an
+assets-only Net Worth stat (all-time savings + gold's current value +
+investments' current value — there's no liability/debt tracking anywhere in
+this app, so this is gross assets, not a true net worth). `DubaiLife.tsx`'s
+lifetime-aggregate section and `Analytics.tsx`'s portfolio allocation
+chart both read through `computePortfolioStats` the same way.
+
+**SIP automation is the one place this app runs code outside the browser.**
+Every other periodic thing in this app (the exchange rate, live NAV) is
+"check staleness and act, but only when someone has the app open." A real
+SIP needs to fire on its date *even if the app is never opened that month*,
+which client code fundamentally cannot do. Since this app has no server of
+its own and no Edge Function deploy pipeline (§2, §8), the only piece of
+infrastructure available for genuine background execution is Postgres
+itself — so `0006_investment_sip.sql` enables the `pg_cron` extension and
+schedules one daily job (`run_sip_investments()`, 00:10 UTC) that scans
+every user's `investments` for `sipEnabled = true` rows whose `sipDay`
+matches today and inserts a SIP transaction for each:
+
+- **One job for all users, not one per investment.** The function loops
+  over every matching row in a single run rather than scheduling/cancelling
+  a `pg_cron` job per investment — turning `sipEnabled` off just removes
+  that row from next run's `where` clause. No separate "cancel the
+  schedule" step exists or is needed.
+- **`sipLastRunDate` is an idempotency guard, not just a timestamp.** It
+  blocks the same investment from firing twice if the job somehow runs
+  twice in a day. The transaction `id` (`'sip-' || investment_id || '-' ||
+  yyyymmdd`) is a second, independent idempotency key via `on conflict do
+  nothing` — belt and suspenders, since this is the one code path in the
+  app where a duplicate write can't be caught by the human clicking Save
+  twice (§ Button double-submit guard, `components/ui/index.tsx`).
+- **Auto-generated SIP transactions never set `units`/`pricePerUnit`, even
+  for a scheme-linked Mutual Fund.** Fetching today's NAV from inside the
+  cron job would mean an HTTP call from Postgres (via the `pg_net`
+  extension), which is an inherently two-phase async pattern in plain SQL.
+  That's meaningfully more fragile than just recording the cash amount —
+  same shape as an FD/PPF/NPS transaction — and letting unit-level
+  precision stay a manual/client-side concern (edit the generated
+  transaction afterward if you want units recorded on it).
+- **Bypasses RLS by necessity.** The function is `security definer` and
+  reads/writes across every user's rows in one pass — a scheduled job has
+  no "current user" to scope `auth.uid()` to. This is the one deliberate
+  exception to the per-user RLS model in §1/§6; every other query in this
+  app is scoped to the signed-in user.
+- **Depends on `pg_cron` being enabled on the Supabase project**, which can
+  vary by plan/region — this could not be verified without access to the
+  live project. The migration file's header comments explain how to check
+  and how to test the function directly (`select run_sip_investments();`)
+  without waiting for the schedule to fire.
 
 ## 8. Exchange rate refresh (`src/utils/exchangeRate.ts`)
 
@@ -388,6 +520,15 @@ One flat file exporting every shared primitive: `Card`, `StatCard`,
 dependency (no shadcn/Radix/MUI) — everything is hand-rolled Tailwind
 markup. New UI patterns should be added here rather than inlined
 per-page, to keep the visual language consistent.
+
+`Button` auto-guards against double-submit: it detects when its `onClick`
+returns a Promise and disables itself for the duration. Nearly every
+Save/Add/Update handler in this app is `async` and `await`s a Supabase
+write before closing its modal (the `writeThrough` pattern, §5.2) — on a
+slow connection that's a multi-second window where, without this guard, a
+fast double-click would fire the handler twice and create two records.
+Fixing it once in `Button` covers every page automatically; no per-page
+loading-state boilerplate is needed or should be added.
 
 Theming is CSS-variable-based (`src/index.css`): `.dark` and
 `:root:not(.dark)` blocks define `--color-bg`, `--color-card`,
@@ -424,11 +565,32 @@ auto-dismissing:
   enough for a single-user app with client-generated IDs, but don't assume
   global uniqueness across users/devices in future multi-tenant work.
 - **Everything loads into memory at once.** `initialize()` fetches all
-  rows for all 7 domain tables with no pagination. Fine today; revisit if
+  rows for all 9 domain tables with no pagination. Fine today; revisit if
   a user's history grows into the thousands of rows.
-- **No recurring transactions.** Rent/salary/subscriptions must be
-  re-entered every month by hand.
+- **No recurring transactions, except Mutual Fund SIPs (§7.10).** Rent,
+  salary, subscriptions, and any other investment type still have to be
+  re-entered every month by hand — SIP is the one exception, and only
+  because it's backed by a `pg_cron` job in Postgres, not client code.
 - **Goals have no contribution ledger** — see §7.3.
+- **Only Mutual Funds have a live price feed.** Stocks, ETFs, Fixed
+  Deposits, PPF, and NPS all rely on the manually-updated `currentValue`
+  (§7.10) — there's no free market-data source for those that's callable
+  directly from a browser (Yahoo Finance's unofficial endpoints, the usual
+  free option, don't send CORS headers, so the browser blocks the request).
+  Adding live Stock/ETF prices would need a small serverless proxy (a
+  Vercel function or Supabase Edge Function) in front of a provider like
+  that — deliberately deferred for the same reason the exchange-rate cron
+  was (§8): no server-side deploy pipeline exists in this repo yet.
+- **SIP automation depends on `pg_cron` being enabled on the Supabase
+  project**, and hasn't been verified against a live project (§7.10) — test
+  it via `select run_sip_investments();` in the SQL Editor after applying
+  `0006_investment_sip.sql`. Auto-generated SIP transactions also never
+  carry `units`/`pricePerUnit`, even for a scheme-linked fund, so they
+  don't contribute to the "Units Held" stat — a deliberate simplicity
+  tradeoff, not a bug (see §7.10 for why).
+- **Net Worth is assets-only.** Dashboard's Net Worth stat (§7.10) sums
+  savings + gold + investments; there's no liability/debt tracking anywhere
+  in the schema, so it's gross assets rather than a textbook net worth.
 - **The exchange-rate refresh is client-triggered only** — see §8.
 - **`README.md` is stale** (describes a pre-Supabase, localStorage-only
   version). Prefer this document for anything architectural; the README

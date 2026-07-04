@@ -25,6 +25,9 @@ there's a record of what changed and when.
 | `0001_initial_schema.sql` | Base schema: `expenses`, `incomes`, `goals`, `budgets`, `gold_purchases`, `settings`, `chit_funds`, `chit_installments`, RLS policies. Includes the historical AED/INR snapshot columns already merged in for fresh installs. |
 | `0002_historical_currency_snapshot.sql` | Adds the AED/INR/exchange-rate snapshot columns to an *existing* database (non-destructive `alter table` + one-time backfill) and is only needed if your database predates `0001` including them. |
 | `0003_add_rate_fetched_at.sql` | Adds `settings."rateFetchedAt"`, used to refresh the exchange rate periodically instead of only once per login (see `src/utils/exchangeRate.ts`). |
+| `0004_investments.sql` | Adds `investments` (one row per holding — mutual fund, stock, ETF, fixed deposit, PPF, NPS, other) and `investment_transactions` (its Buy/SIP/Sell/Dividend ledger), following the same parent+child shape as `chit_funds`/`chit_installments`, plus the historical AED/INR snapshot columns from `0002`. |
+| `0005_investment_scheme_code.sql` | Adds `investments."schemeCode"`, the AMFI scheme code used to refresh a Mutual Fund holding's NAV live from mfapi.in (see `src/utils/mfNav.ts`). Null for everything that isn't a scheme-linked Mutual Fund. |
+| `0006_investment_sip.sql` | Adds SIP columns (`sipEnabled`, `sipAmount`, `sipDay`, `sipLastRunDate`) plus a `pg_cron`-scheduled Postgres function that auto-inserts a SIP transaction monthly. **Requires the `pg_cron` extension enabled on your project** (Dashboard → Database → Extensions) — see the comments at the top of the file for how to verify it worked without waiting a full day. |
 
 ## Upgrading to the real Supabase CLI later
 

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { TrendingUp, TrendingDown, PiggyBank, Percent, ArrowRightLeft, AlertTriangle } from 'lucide-react';
-import { useExpenses, useIncomes, useSettings } from '../stores/useAppStore';
+import { TrendingUp, TrendingDown, PiggyBank, Percent, ArrowRightLeft, AlertTriangle, Landmark } from 'lucide-react';
+import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useSettings } from '../stores/useAppStore';
 import { StatCard } from '../components/ui';
 import { resolveAed, resolveInr, formatCurrency, getCurrentMonthKey, getMonthKey, getMonthLabel, computeMonthlyStats, CATEGORY_COLORS } from '../utils';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
@@ -32,6 +32,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export default function Dashboard() {
   const expenses = useExpenses();
   const incomes = useIncomes();
+  const goldPurchases = useGoldPurchases();
+  const investments = useInvestments();
   const settings = useSettings();
   const { aedToInrRate } = settings;
 
@@ -72,6 +74,25 @@ export default function Dashboard() {
     computeMonthlyStats(expenses, incomes, aedToInrRate).slice(-6),
     [expenses, incomes, aedToInrRate]
   );
+
+  // Net worth (assets-only — this app doesn't track liabilities): all-time
+  // savings + gold's current value + investments' current value, all
+  // resolved through their frozen historical snapshots (§7.1).
+  const netWorth = useMemo(() => {
+    const allTimeIncome = incomes.reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0);
+    const allTimeExpenses = expenses.reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0);
+    const goldValue = goldPurchases.reduce((s, g) => s + resolveAed(g.weightGrams * g.pricePerGram, g.currency, g.totalValueAed, aedToInrRate), 0);
+    const investmentsValue = investments.reduce((s, i) => s + resolveAed(i.currentValue, i.currency, i.currentValueAed, aedToInrRate), 0);
+    return (allTimeIncome - allTimeExpenses) + goldValue + investmentsValue;
+  }, [incomes, expenses, goldPurchases, investments, aedToInrRate]);
+
+  const netWorthInr = useMemo(() => {
+    const allTimeIncomeInr = incomes.reduce((s, i) => s + resolveInr(i.amount, i.currency, i.amountInr, aedToInrRate), 0);
+    const allTimeExpensesInr = expenses.reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0);
+    const goldValueInr = goldPurchases.reduce((s, g) => s + resolveInr(g.weightGrams * g.pricePerGram, g.currency, g.totalValueInr, aedToInrRate), 0);
+    const investmentsValueInr = investments.reduce((s, i) => s + resolveInr(i.currentValue, i.currency, i.currentValueInr, aedToInrRate), 0);
+    return (allTimeIncomeInr - allTimeExpensesInr) + goldValueInr + investmentsValueInr;
+  }, [incomes, expenses, goldPurchases, investments, aedToInrRate]);
 
   const chartData = monthlyStats.map(s => ({
     month: getMonthLabel(s.month),
@@ -157,6 +178,17 @@ export default function Dashboard() {
           sub={savingsRate >= 30 ? '🎉 Excellent!' : savingsRate >= 20 ? '👍 Good' : '⚠️ Low'}
           icon={<Percent size={16} />}
           color="theme"
+        />
+      </div>
+
+      {/* Net Worth */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <StatCard
+          title="Net Worth"
+          value={`AED ${netWorth.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(netWorthInr, 'INR')} · savings + gold + investments`}
+          icon={<Landmark size={16} />}
+          color="blue"
         />
       </div>
 

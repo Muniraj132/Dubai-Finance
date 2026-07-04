@@ -1,4 +1,4 @@
-import { Expense, Income, MonthlyStats } from '../types';
+import { Expense, Income, MonthlyStats, Investment, InvestmentTransaction } from '../types';
 
 export const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -108,3 +108,97 @@ export const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export const GOAL_COLORS = ['#f97316','#3b82f6','#22c55e','#8b5cf6','#ec4899','#f59e0b','#10b981','#e11d48'];
+
+export const INVESTMENT_TYPES = ['Mutual Fund', 'Stock', 'ETF', 'Fixed Deposit', 'PPF', 'NPS', 'Other'] as const;
+
+export const INVESTMENT_TYPE_COLORS: Record<string, string> = {
+  'Mutual Fund': '#3b82f6',
+  Stock: '#a855f7',
+  ETF: '#06b6d4',
+  'Fixed Deposit': '#10b981',
+  PPF: '#6366f1',
+  NPS: '#f97316',
+  Other: '#78716c',
+};
+
+// Keys into the Badge/StatCard colorMap in components/ui/index.tsx
+export const INVESTMENT_TYPE_BADGE: Record<string, string> = {
+  'Mutual Fund': 'blue',
+  Stock: 'purple',
+  ETF: 'cyan',
+  'Fixed Deposit': 'emerald',
+  PPF: 'indigo',
+  NPS: 'orange',
+  Other: 'theme',
+};
+
+export interface InvestmentStats {
+  investedAed: number;
+  investedInr: number;
+  dividendsAed: number;
+  dividendsInr: number;
+  currentValueAed: number;
+  currentValueInr: number;
+  gainAed: number;
+  gainInr: number;
+  gainPct: number;
+  totalUnits: number;
+}
+
+// Buy/SIP add to the cost basis and unit count, Sell reduces both, Dividend is
+// cash received that doesn't touch the cost basis. currentValue is a separate
+// manually-updated mark-to-market figure (§ investments in ARCHITECTURE.md),
+// so gain/loss = currentValue - invested, not derived from transactions alone.
+export const computeInvestmentStats = (
+  investment: Investment,
+  transactions: InvestmentTransaction[],
+  rate: number
+): InvestmentStats => {
+  let investedAed = 0, investedInr = 0, dividendsAed = 0, dividendsInr = 0, totalUnits = 0;
+
+  transactions.forEach(t => {
+    const aed = resolveAed(t.amount, t.currency, t.amountAed, rate);
+    const inr = resolveInr(t.amount, t.currency, t.amountInr, rate);
+    if (t.type === 'Buy' || t.type === 'SIP') {
+      investedAed += aed;
+      investedInr += inr;
+      totalUnits += t.units ?? 0;
+    } else if (t.type === 'Sell') {
+      investedAed -= aed;
+      investedInr -= inr;
+      totalUnits -= t.units ?? 0;
+    } else if (t.type === 'Dividend') {
+      dividendsAed += aed;
+      dividendsInr += inr;
+    }
+  });
+
+  const currentValueAed = resolveAed(investment.currentValue, investment.currency, investment.currentValueAed, rate);
+  const currentValueInr = resolveInr(investment.currentValue, investment.currency, investment.currentValueInr, rate);
+  const gainAed = currentValueAed - investedAed;
+  const gainInr = currentValueInr - investedInr;
+  const gainPct = investedAed > 0 ? (gainAed / investedAed) * 100 : 0;
+
+  return { investedAed, investedInr, dividendsAed, dividendsInr, currentValueAed, currentValueInr, gainAed, gainInr, gainPct, totalUnits };
+};
+
+export const computePortfolioStats = (
+  investments: Investment[],
+  transactions: InvestmentTransaction[],
+  rate: number
+): Omit<InvestmentStats, 'gainPct' | 'totalUnits'> & { gainPct: number } => {
+  const totals = investments.reduce((acc, inv) => {
+    const s = computeInvestmentStats(inv, transactions.filter(t => t.investment_id === inv.id), rate);
+    acc.investedAed += s.investedAed;
+    acc.investedInr += s.investedInr;
+    acc.dividendsAed += s.dividendsAed;
+    acc.dividendsInr += s.dividendsInr;
+    acc.currentValueAed += s.currentValueAed;
+    acc.currentValueInr += s.currentValueInr;
+    acc.gainAed += s.gainAed;
+    acc.gainInr += s.gainInr;
+    return acc;
+  }, { investedAed: 0, investedInr: 0, dividendsAed: 0, dividendsInr: 0, currentValueAed: 0, currentValueInr: 0, gainAed: 0, gainInr: 0 });
+  const gainPct = totals.investedAed > 0 ? (totals.gainAed / totals.investedAed) * 100 : 0;
+  return { ...totals, gainPct };
+};

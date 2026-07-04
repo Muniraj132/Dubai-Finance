@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../utils/supabase';
-import { Expense, Income, Goal, Budget, GoldPurchase, AppSettings, ChitFund, ChitInstallment, Currency } from '../types';
+import { Expense, Income, Goal, Budget, GoldPurchase, AppSettings, ChitFund, ChitInstallment, Investment, InvestmentTransaction, Currency } from '../types';
 import { generateId, convertToAED, convertToINR } from '../utils';
 
 const getUid = async () => {
@@ -30,6 +30,8 @@ interface AppState {
   goldPurchases: GoldPurchase[];
   chitFunds: ChitFund[];
   chitInstallments: ChitInstallment[];
+  investments: Investment[];
+  investmentTransactions: InvestmentTransaction[];
   settings: AppSettings;
   isLoading: boolean;
   rateJustUpdated: boolean;
@@ -67,6 +69,14 @@ interface AppState {
   updateChitInstallment: (id: string, inst: Partial<ChitInstallment>) => Promise<void>;
   deleteChitInstallment: (id: string) => Promise<void>;
 
+  addInvestment: (investment: Omit<Investment, 'id' | 'createdAt'>) => Promise<void>;
+  updateInvestment: (id: string, investment: Partial<Investment>) => Promise<void>;
+  deleteInvestment: (id: string) => Promise<void>;
+
+  addInvestmentTransaction: (txn: Omit<InvestmentTransaction, 'id' | 'createdAt'>) => Promise<void>;
+  updateInvestmentTransaction: (id: string, txn: Partial<InvestmentTransaction>) => Promise<void>;
+  deleteInvestmentTransaction: (id: string) => Promise<void>;
+
   updateSettings: (settings: Partial<AppSettings>) => Promise<void>;
 }
 
@@ -96,6 +106,8 @@ export const useAppStore = create<AppState>()((set, get) => {
     goldPurchases: [],
     chitFunds: [],
     chitInstallments: [],
+    investments: [],
+    investmentTransactions: [],
     settings: DEFAULT_SETTINGS,
     isLoading: false,
     rateJustUpdated: false,
@@ -106,7 +118,7 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     initialize: async () => {
       set({ isLoading: true });
-      const [expenses, incomes, goals, budgets, goldPurchases, chitFunds, chitInstallments, settings] = await Promise.all([
+      const [expenses, incomes, goals, budgets, goldPurchases, chitFunds, chitInstallments, investments, investmentTransactions, settings] = await Promise.all([
         supabase.from('expenses').select('*').order('createdAt', { ascending: false }),
         supabase.from('incomes').select('*').order('createdAt', { ascending: false }),
         supabase.from('goals').select('*').order('createdAt', { ascending: false }),
@@ -114,6 +126,8 @@ export const useAppStore = create<AppState>()((set, get) => {
         supabase.from('gold_purchases').select('*').order('createdAt', { ascending: false }),
         supabase.from('chit_funds').select('*').order('createdAt', { ascending: false }),
         supabase.from('chit_installments').select('*').order('month_no', { ascending: true }),
+        supabase.from('investments').select('*').order('createdAt', { ascending: false }),
+        supabase.from('investment_transactions').select('*').order('date', { ascending: false }),
         supabase.from('settings').select('*').maybeSingle(),
       ]);
       set({
@@ -124,6 +138,8 @@ export const useAppStore = create<AppState>()((set, get) => {
         goldPurchases: goldPurchases.data ?? [],
         chitFunds: chitFunds.data ?? [],
         chitInstallments: chitInstallments.data ?? [],
+        investments: investments.data ?? [],
+        investmentTransactions: investmentTransactions.data ?? [],
         settings: settings.data ?? DEFAULT_SETTINGS,
         isLoading: false,
       });
@@ -137,6 +153,8 @@ export const useAppStore = create<AppState>()((set, get) => {
       goldPurchases: [],
       chitFunds: [],
       chitInstallments: [],
+      investments: [],
+      investmentTransactions: [],
       settings: DEFAULT_SETTINGS,
       lastError: null,
     }),
@@ -351,6 +369,78 @@ export const useAppStore = create<AppState>()((set, get) => {
       );
     },
 
+    addInvestment: async (investment) => {
+      const rate = get().settings.aedToInrRate;
+      const newInvestment: Investment = {
+        ...investment,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+        currentValueAed: convertToAED(investment.currentValue, investment.currency, rate),
+        currentValueInr: convertToINR(investment.currentValue, investment.currency, rate),
+        exchangeRateUsed: rate,
+      };
+      const uid = await getUid();
+      await writeThrough('investments', [newInvestment, ...get().investments], () =>
+        supabase.from('investments').insert({ ...newInvestment, user_id: uid })
+      );
+    },
+    updateInvestment: async (id, patch) => {
+      const existing = get().investments.find((i) => i.id === id);
+      let extra: Partial<Investment> = {};
+      if (existing && (patch.currentValue !== undefined || patch.currency !== undefined)) {
+        const rate = get().settings.aedToInrRate;
+        const currentValue = patch.currentValue ?? existing.currentValue;
+        const currency = patch.currency ?? existing.currency;
+        extra = {
+          currentValueAed: convertToAED(currentValue, currency, rate),
+          currentValueInr: convertToINR(currentValue, currency, rate),
+          exchangeRateUsed: rate,
+        };
+      }
+      const fullPatch = { ...patch, ...extra };
+      await writeThrough('investments', get().investments.map((i) => (i.id === id ? { ...i, ...fullPatch } : i)), () =>
+        supabase.from('investments').update(fullPatch).eq('id', id)
+      );
+    },
+    deleteInvestment: async (id) => {
+      const prevTransactions = get().investmentTransactions;
+      await writeThrough('investments', get().investments.filter((i) => i.id !== id), async () => {
+        set({ investmentTransactions: prevTransactions.filter((t) => t.investment_id !== id) });
+        const { error } = await supabase.from('investments').delete().eq('id', id);
+        if (error) set({ investmentTransactions: prevTransactions });
+        return { error };
+      });
+    },
+
+    addInvestmentTransaction: async (txn) => {
+      const rate = get().settings.aedToInrRate;
+      const newTxn: InvestmentTransaction = {
+        ...txn,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+        ...snapshotRates(txn.amount, txn.currency, rate),
+      };
+      const uid = await getUid();
+      await writeThrough('investmentTransactions', [newTxn, ...get().investmentTransactions], () =>
+        supabase.from('investment_transactions').insert({ ...newTxn, user_id: uid })
+      );
+    },
+    updateInvestmentTransaction: async (id, patch) => {
+      const existing = get().investmentTransactions.find((t) => t.id === id);
+      const extra = existing && (patch.amount !== undefined || patch.currency !== undefined)
+        ? snapshotRates(patch.amount ?? existing.amount, patch.currency ?? existing.currency, get().settings.aedToInrRate)
+        : {};
+      const fullPatch = { ...patch, ...extra };
+      await writeThrough('investmentTransactions', get().investmentTransactions.map((t) => (t.id === id ? { ...t, ...fullPatch } : t)), () =>
+        supabase.from('investment_transactions').update(fullPatch).eq('id', id)
+      );
+    },
+    deleteInvestmentTransaction: async (id) => {
+      await writeThrough('investmentTransactions', get().investmentTransactions.filter((t) => t.id !== id), () =>
+        supabase.from('investment_transactions').delete().eq('id', id)
+      );
+    },
+
     updateSettings: async (settings) => {
       const merged = { ...get().settings, ...settings };
       const { data: { user } } = await supabase.auth.getUser();
@@ -370,3 +460,5 @@ export const useBudgets = () => useAppStore((s) => s.budgets);
 export const useGoldPurchases = () => useAppStore((s) => s.goldPurchases);
 export const useChitFunds = () => useAppStore((s) => s.chitFunds);
 export const useChitInstallments = () => useAppStore((s) => s.chitInstallments);
+export const useInvestments = () => useAppStore((s) => s.investments);
+export const useInvestmentTransactions = () => useAppStore((s) => s.investmentTransactions);

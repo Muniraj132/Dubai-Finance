@@ -1,13 +1,15 @@
 import { useMemo } from 'react';
-import { Palmtree, Calendar, TrendingUp, PiggyBank, Gem, Heart } from 'lucide-react';
-import { useExpenses, useIncomes, useGoldPurchases, useSettings } from '../stores/useAppStore';
+import { Palmtree, Calendar, TrendingUp, PiggyBank, Gem, Heart, LineChart } from 'lucide-react';
+import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useInvestmentTransactions, useSettings } from '../stores/useAppStore';
 import { PageHeader, StatCard } from '../components/ui';
-import { resolveAed, resolveInr, formatCurrency, EXPENSE_CATEGORIES } from '../utils';
+import { resolveAed, resolveInr, formatCurrency, computePortfolioStats, EXPENSE_CATEGORIES } from '../utils';
 
 export default function DubaiLife() {
   const expenses = useExpenses();
   const incomes = useIncomes();
   const goldPurchases = useGoldPurchases();
+  const investments = useInvestments();
+  const investmentTransactions = useInvestmentTransactions();
   const settings = useSettings();
   const { aedToInrRate, dubaiArrivalDate } = settings;
 
@@ -49,6 +51,11 @@ export default function DubaiLife() {
       return s + resolveAed(val, g.currency, g.totalValueAed, aedToInrRate);
     }, 0),
     [goldPurchases, aedToInrRate]
+  );
+
+  const portfolioStats = useMemo(
+    () => computePortfolioStats(investments, investmentTransactions, aedToInrRate),
+    [investments, investmentTransactions, aedToInrRate]
   );
 
   const familySupport = useMemo(() =>
@@ -95,7 +102,7 @@ export default function DubaiLife() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Total Earnings"
           value={`AED ${totalEarnings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
@@ -116,6 +123,13 @@ export default function DubaiLife() {
           sub={`AED ${totalGoldValue.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
           icon={<Gem size={16} />}
           color="yellow"
+        />
+        <StatCard
+          title="Investments"
+          value={`AED ${portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`${portfolioStats.gainPct >= 0 ? '+' : ''}${portfolioStats.gainPct.toFixed(1)}% gain/loss`}
+          icon={<LineChart size={16} />}
+          color="purple"
         />
         <StatCard
           title="Family Support"

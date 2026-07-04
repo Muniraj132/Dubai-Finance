@@ -1,5 +1,5 @@
 import { Download, FileText } from 'lucide-react';
-import { useExpenses, useIncomes, useGoals, useSettings } from '../stores/useAppStore';
+import { useExpenses, useIncomes, useGoals, useInvestments, useInvestmentTransactions, useSettings } from '../stores/useAppStore';
 import { PageHeader, Button, Card } from '../components/ui';
 import { exportToCSV, formatDate, resolveAed, resolveInr } from '../utils';
 
@@ -7,6 +7,8 @@ export default function Reports() {
   const expenses = useExpenses();
   const incomes = useIncomes();
   const goals = useGoals();
+  const investments = useInvestments();
+  const investmentTransactions = useInvestmentTransactions();
   const { aedToInrRate } = useSettings();
 
   const exportExpenses = () => {
@@ -56,16 +58,57 @@ export default function Reports() {
     );
   };
 
+  const exportInvestments = () => {
+    exportToCSV(
+      investments.map(i => ({
+        Name: i.name,
+        Type: i.type,
+        Currency: i.currency,
+        CurrentValue: i.currentValue,
+        CurrentValueAED: resolveAed(i.currentValue, i.currency, i.currentValueAed, aedToInrRate),
+        CurrentValueINR: resolveInr(i.currentValue, i.currency, i.currentValueInr, aedToInrRate),
+        Status: i.status,
+        MaturityDate: i.maturityDate ?? '',
+        InterestRate: i.interestRate ?? '',
+        Notes: i.notes,
+      })),
+      'investments'
+    );
+  };
+
+  const exportInvestmentTransactions = () => {
+    exportToCSV(
+      investmentTransactions.map(t => {
+        const investment = investments.find(i => i.id === t.investment_id);
+        return {
+          Date: t.date,
+          Investment: investment?.name ?? t.investment_id,
+          Type: t.type,
+          Units: t.units ?? '',
+          PricePerUnit: t.pricePerUnit ?? '',
+          Amount: t.amount,
+          Currency: t.currency,
+          AmountAED: resolveAed(t.amount, t.currency, t.amountAed, aedToInrRate),
+          AmountINR: resolveInr(t.amount, t.currency, t.amountInr, aedToInrRate),
+          Notes: t.notes,
+        };
+      }),
+      'investment_transactions'
+    );
+  };
+
   const reports = [
     { title: 'Expenses Report', description: `${expenses.length} expense records`, action: exportExpenses, color: 'red' },
     { title: 'Income Report', description: `${incomes.length} income records`, action: exportIncome, color: 'green' },
     { title: 'Goals Report', description: `${goals.length} financial goals`, action: exportGoals, color: 'blue' },
+    { title: 'Investments Report', description: `${investments.length} holdings`, action: exportInvestments, color: 'purple' },
+    { title: 'Investment Transactions', description: `${investmentTransactions.length} transactions`, action: exportInvestmentTransactions, color: 'amber' },
   ];
 
   return (
     <div className="space-y-5">
       <PageHeader title="Reports" subtitle="Export your financial data" />
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {reports.map(r => (
           <div key={r.title} className="card flex flex-col gap-4">
             <div>
