@@ -28,8 +28,15 @@ export default function Expenses() {
   const [filterMonth, setFilterMonth] = useState(getCurrentMonthKey());
   const [filterCategory, setFilterCategory] = useState<string>('All');
 
+  // Always include the current month, even with zero expenses in it — the
+  // filter defaults to the current month below, and a <select> whose value
+  // doesn't match any of its <option>s falls back to showing the first
+  // option ("All Months") while still silently filtering by the (missing)
+  // current month. That's what made the dropdown look wrong: it displayed
+  // "All Months" while zero results were actually being filtered in by month.
   const months = useMemo(() => {
     const set = new Set(expenses.map(e => getMonthKey(e.date)));
+    set.add(getCurrentMonthKey());
     return Array.from(set).sort().reverse();
   }, [expenses]);
 

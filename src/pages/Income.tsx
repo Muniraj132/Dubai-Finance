@@ -27,8 +27,14 @@ export default function IncomePage() {
   const [form, setForm] = useState(defaultForm());
   const [filterMonth, setFilterMonth] = useState(getCurrentMonthKey());
 
+  // Always include the current month, even with zero incomes in it — the
+  // filter defaults to the current month below, and a <select> whose value
+  // doesn't match any of its <option>s falls back to displaying the first
+  // option ("All Months") while still silently filtering by the (missing)
+  // current month underneath. See Expenses.tsx for the same fix.
   const months = useMemo(() => {
     const set = new Set(incomes.map(i => getMonthKey(i.date)));
+    set.add(getCurrentMonthKey());
     return Array.from(set).sort().reverse();
   }, [incomes]);
 

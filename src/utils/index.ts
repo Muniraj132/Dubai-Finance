@@ -182,13 +182,27 @@ export const computeInvestmentStats = (
   return { investedAed, investedInr, dividendsAed, dividendsInr, currentValueAed, currentValueInr, gainAed, gainInr, gainPct, totalUnits };
 };
 
+// Groups once (O(m)) instead of the O(n×m) that `transactions.filter(...)`
+// per investment would cost — matters once a portfolio has many holdings
+// and a long transaction history (SIPs accumulate fast).
+export const groupByInvestmentId = (transactions: InvestmentTransaction[]): Map<string, InvestmentTransaction[]> => {
+  const map = new Map<string, InvestmentTransaction[]>();
+  transactions.forEach(t => {
+    const list = map.get(t.investment_id);
+    if (list) list.push(t);
+    else map.set(t.investment_id, [t]);
+  });
+  return map;
+};
+
 export const computePortfolioStats = (
   investments: Investment[],
   transactions: InvestmentTransaction[],
   rate: number
 ): Omit<InvestmentStats, 'gainPct' | 'totalUnits'> & { gainPct: number } => {
+  const byInvestment = groupByInvestmentId(transactions);
   const totals = investments.reduce((acc, inv) => {
-    const s = computeInvestmentStats(inv, transactions.filter(t => t.investment_id === inv.id), rate);
+    const s = computeInvestmentStats(inv, byInvestment.get(inv.id) ?? [], rate);
     acc.investedAed += s.investedAed;
     acc.investedInr += s.investedInr;
     acc.dividendsAed += s.dividendsAed;

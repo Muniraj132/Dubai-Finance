@@ -10,7 +10,7 @@ import {
   ConfirmDialog, EmptyState, StatCard, Badge,
 } from '../components/ui';
 import {
-  formatDate, formatCurrency, convertToAED, computeInvestmentStats, computePortfolioStats,
+  formatDate, formatCurrency, convertToAED, computeInvestmentStats, computePortfolioStats, groupByInvestmentId,
   INVESTMENT_TYPES, INVESTMENT_TYPE_BADGE,
 } from '../utils';
 import { searchMfSchemes, fetchLatestNav, MfSchemeSearchResult } from '../utils/mfNav';
@@ -126,8 +126,12 @@ export default function Investments() {
     [investments, transactions, aedToInrRate],
   );
 
+  // Grouped once per transactions change instead of `.filter()`-ing the full
+  // array for every investment on every render (O(n×m) → O(n+m)).
+  const txnsByInvestmentId = useMemo(() => groupByInvestmentId(transactions), [transactions]);
+
   const statsFor = (inv: Investment) =>
-    computeInvestmentStats(inv, transactions.filter(t => t.investment_id === inv.id), aedToInrRate);
+    computeInvestmentStats(inv, txnsByInvestmentId.get(inv.id) ?? [], aedToInrRate);
 
   const detailStats = selectedInvestment ? statsFor(selectedInvestment) : null;
 
@@ -304,7 +308,7 @@ export default function Investments() {
             title="Investments"
             subtitle={`${investments.length} holding${investments.length !== 1 ? 's' : ''}`}
             action={
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {linkedMfInvestments.length > 0 && (
                   <Button variant="secondary" onClick={refreshAllNavs} disabled={refreshingAll}>
                     <RefreshCw size={16} className={refreshingAll ? 'animate-spin' : ''} /> Refresh NAVs
@@ -358,10 +362,10 @@ export default function Investments() {
                 const s = statsFor(inv);
                 return (
                   <div key={inv.id} className="card group flex flex-col gap-3">
-                    <div className="flex items-start justify-between">
-                      <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-semibold text-primary text-sm">{inv.name}</h3>
+                          <h3 className="font-semibold text-primary text-sm break-words">{inv.name}</h3>
                           {inv.status === 'closed' && <Badge color={STATUS_BADGE[inv.status]}>closed</Badge>}
                         </div>
                         <p className="text-xs mt-0.5 flex items-center gap-1.5 flex-wrap">
@@ -369,7 +373,8 @@ export default function Investments() {
                           {inv.sipEnabled && <Badge color="blue">SIP · Day {inv.sipDay}</Badge>}
                         </p>
                       </div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      {/* Always visible on mobile (no hover to reveal on touch); hover-reveal kicks in from sm: up. */}
+                      <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
                         <button onClick={() => openEditInvestment(inv)} className="p-1 text-muted hover:text-primary"><Edit2 size={12} /></button>
                         <button onClick={() => setDeleteInvId(inv.id)} className="p-1 text-muted hover:text-red-400"><Trash2 size={12} /></button>
                       </div>
@@ -422,9 +427,9 @@ export default function Investments() {
               >
                 <ArrowLeft size={16} />
               </button>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-xl font-bold text-primary tracking-tight">{selectedInvestment.name}</h1>
+                  <h1 className="text-xl font-bold text-primary tracking-tight break-words">{selectedInvestment.name}</h1>
                   <Badge color={INVESTMENT_TYPE_BADGE[selectedInvestment.type]}>{selectedInvestment.type}</Badge>
                   {selectedInvestment.status === 'closed' && <Badge color={STATUS_BADGE.closed}>closed</Badge>}
                 </div>
@@ -443,7 +448,7 @@ export default function Investments() {
                 )}
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {selectedInvestment.type === 'Mutual Fund' && selectedInvestment.schemeCode && (
                 <Button
                   variant="secondary"
@@ -526,7 +531,7 @@ export default function Investments() {
                         </td>
                         <td className="px-4 py-3 text-muted text-xs hidden lg:table-cell max-w-[160px] truncate">{t.notes || '—'}</td>
                         <td className="px-4 py-3">
-                          <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex gap-1 justify-end opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button onClick={() => openEditTxn(t)} className="p-1 text-muted hover:text-primary"><Edit2 size={12} /></button>
                             <button onClick={() => setDeleteTxnId(t.id)} className="p-1 text-muted hover:text-red-400"><Trash2 size={12} /></button>
                           </div>

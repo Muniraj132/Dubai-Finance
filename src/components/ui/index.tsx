@@ -178,8 +178,12 @@ export const EmptyState = ({ icon, title, description }: { icon: ReactNode; titl
 );
 
 // PageHeader
+// flex-wrap matters here: most pages pass a single button as `action`, which
+// always fits next to the title, but a page with a wider action (e.g.
+// multiple buttons) needs to be able to drop to its own row on narrow
+// screens instead of overflowing/squeezing against `shrink-0`.
 export const PageHeader = ({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) => (
-  <div className="flex items-start justify-between mb-6 gap-4">
+  <div className="flex items-start justify-between flex-wrap gap-4 mb-6">
     <div>
       <h1 className="text-xl font-bold text-primary tracking-tight">{title}</h1>
       {subtitle && <p className="text-sm text-muted mt-0.5">{subtitle}</p>}
