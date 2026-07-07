@@ -70,14 +70,14 @@ export default function GoldTracker() {
           value={`${stats.totalWeight.toFixed(4)} g`}
           sub={`Target: ${GOLD_TARGET_GRAMS}g`}
           icon={<Gem size={16} />}
-          color="yellow"
+          color="amber"
         />
         <StatCard
           title="Total Value"
           value={`AED ${stats.totalValue.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
           sub={`≈ ${formatCurrency(stats.totalValueInr, 'INR')}`}
           icon={<Gem size={16} />}
-          color="theme"
+          color="amber"
         />
         <StatCard
           title="Purchases"

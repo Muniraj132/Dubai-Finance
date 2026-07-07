@@ -72,7 +72,7 @@ export default function Layout() {
         {/* Logo */}
         <div className="flex items-center justify-between px-5 py-5 border-b border-sidebar-border">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#C75B76] to-[#A6445D] flex items-center justify-center shadow-lg shadow-[#A6445D]/30">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#818CF8] to-[#6366F1] flex items-center justify-center shadow-lg shadow-[#6366F1]/30">
               <Palmtree size={16} className="text-white" />
             </div>
             <div>
@@ -97,15 +97,15 @@ export default function Layout() {
                 flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
                 transition-all duration-150 group
                 ${isActive
-                  ? 'bg-[#A6445D]/15 text-[#A6445D] border border-[#A6445D]/20'
+                  ? 'bg-[#6366F1]/15 text-[#6366F1] border border-[#6366F1]/20'
                   : 'text-sidebar-muted hover:text-sidebar-text hover:bg-white/5'}
               `}
             >
               {({ isActive }) => (
                 <>
-                  <Icon size={16} className={isActive ? 'text-[#A6445D]' : 'text-sidebar-muted group-hover:text-sidebar-text'} />
+                  <Icon size={16} className={isActive ? 'text-[#6366F1]' : 'text-sidebar-muted group-hover:text-sidebar-text'} />
                   <span className="flex-1">{label}</span>
-                  {isActive && <ChevronRight size={12} className="text-[#A6445D]" />}
+                  {isActive && <ChevronRight size={12} className="text-[#6366F1]" />}
                 </>
               )}
             </NavLink>
@@ -117,8 +117,8 @@ export default function Layout() {
           {/* User row */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6 h-6 rounded-full bg-[#A6445D]/20 flex items-center justify-center shrink-0">
-                <User size={12} className="text-[#A6445D]" />
+              <div className="w-6 h-6 rounded-full bg-[#6366F1]/20 flex items-center justify-center shrink-0">
+                <User size={12} className="text-[#6366F1]" />
               </div>
               <span className="text-xs text-sidebar-muted truncate">{user?.email}</span>
             </div>
@@ -152,7 +152,7 @@ export default function Layout() {
             <Menu size={20} />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#C75B76] to-[#A6445D] flex items-center justify-center">
+            <div className="w-6 h-6 rounded-md bg-gradient-to-br from-[#818CF8] to-[#6366F1] flex items-center justify-center">
               <Palmtree size={12} className="text-white" />
             </div>
             <span className="text-sm font-bold text-sidebar-text">Dubai Finance</span>

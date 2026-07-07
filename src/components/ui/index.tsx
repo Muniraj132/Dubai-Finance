@@ -7,7 +7,7 @@ export const Card = ({ children, className = '' }: { children: ReactNode; classN
 );
 
 const colorMap: Record<string, { bg: string; text: string }> = {
-  theme: { bg: 'bg-[#A6445D]/15', text: 'text-[#A6445D]' },
+  theme: { bg: 'bg-[#6366F1]/15', text: 'text-[#6366F1]' },
   green: { bg: 'bg-green-500/15', text: 'text-green-400' },
   red: { bg: 'bg-red-500/15', text: 'text-red-400' },
   blue: { bg: 'bg-blue-500/15', text: 'text-blue-400' },
@@ -124,7 +124,7 @@ export const Button = ({
   };
 
   const variants: Record<BtnVariant, string> = {
-    primary: 'bg-[#A6445D] hover:bg-[#8A384C] text-white shadow-lg shadow-[#A6445D]/25',
+    primary: 'bg-[#6366F1] hover:bg-[#4F46E5] text-white shadow-lg shadow-[#6366F1]/25',
     secondary: 'bg-white/10 hover:bg-white/15 text-primary border border-white/10',
     danger: 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20',
     ghost: 'hover:bg-white/5 text-muted hover:text-primary',
@@ -152,7 +152,7 @@ export const Badge = ({ children, color = 'theme' }: { children: ReactNode; colo
 };
 
 // ProgressBar
-export const ProgressBar = ({ value, color = '#A6445D', showLabel = true }: { value: number; color?: string; showLabel?: boolean }) => {
+export const ProgressBar = ({ value, color = '#6366F1', showLabel = true }: { value: number; color?: string; showLabel?: boolean }) => {
   const pct = Math.min(100, Math.max(0, value));
   const barColor = pct >= 100 ? '#ef4444' : pct >= 80 ? '#f59e0b' : color;
   return (

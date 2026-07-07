@@ -199,7 +199,7 @@ export default function Analytics() {
       {/* Overall Summary */}
       <div className="card">
         <div className="flex items-center gap-2 mb-4">
-          <Layers size={15} className="text-[#A6445D]" />
+          <Layers size={15} className="text-[#6366F1]" />
           <h2 className="text-sm font-semibold text-primary">Overall Summary</h2>
           <span className="text-xs text-muted ml-auto">All-time</span>
         </div>
@@ -279,7 +279,7 @@ export default function Analytics() {
               <Tooltip content={<CustomTooltip />} />
               <Line type="monotone" dataKey="income" stroke="#22c55e" strokeWidth={2} dot={{ fill: '#22c55e', r: 3 }} name="income" />
               <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} dot={{ fill: '#ef4444', r: 3 }} name="expenses" />
-              <Line type="monotone" dataKey="savings" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} strokeDasharray="4 2" name="savings" />
+              <Line type="monotone" dataKey="savings" stroke="#06b6d4" strokeWidth={2} dot={{ fill: '#06b6d4', r: 3 }} strokeDasharray="4 2" name="savings" />
             </LineChart>
           </ResponsiveContainer>
         )}
@@ -345,7 +345,7 @@ export default function Analytics() {
           <h2 className="text-sm font-semibold text-primary mb-1">This Month — by Category</h2>
           <div className="text-xs text-muted mb-4">
             Total: AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
-          <span className="ml-2 text-[#A6445D]">≈ ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+          <span className="ml-2 text-[#6366F1]">≈ ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
           </div>
           {currentMonthCategoryData.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-muted text-sm">No expenses this month.</div>
@@ -413,9 +413,9 @@ export default function Analytics() {
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={55} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
               <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="savings" fill="#3b82f6" radius={[4, 4, 0, 0]} name="savings">
+              <Bar dataKey="savings" fill="#06b6d4" radius={[4, 4, 0, 0]} name="savings">
                 {chartData.map((entry, i) => (
-                  <Cell key={i} fill={entry.savings >= 0 ? '#3b82f6' : '#ef4444'} />
+                  <Cell key={i} fill={entry.savings >= 0 ? '#06b6d4' : '#ef4444'} />
                 ))}
               </Bar>
             </BarChart>

@@ -131,7 +131,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Entertainment: '#f59e0b',
   Travel: '#10b981',
   Gift: '#e11d48',
-  'Family Support': '#6366f1',
+  'Family Support': '#d946ef',
   Others: '#78716c',
 };
 
@@ -144,7 +144,7 @@ export const INVESTMENT_TYPE_COLORS: Record<string, string> = {
   Stock: '#a855f7',
   ETF: '#06b6d4',
   'Fixed Deposit': '#10b981',
-  PPF: '#6366f1',
+  PPF: '#eab308',
   NPS: '#f97316',
   Other: '#78716c',
 };
@@ -155,7 +155,7 @@ export const INVESTMENT_TYPE_BADGE: Record<string, string> = {
   Stock: 'purple',
   ETF: 'cyan',
   'Fixed Deposit': 'emerald',
-  PPF: 'indigo',
+  PPF: 'yellow',
   NPS: 'orange',
   Other: 'theme',
 };

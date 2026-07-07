@@ -6,22 +6,22 @@
 
 /* ── Design Tokens ── */
 :root {
-  --color-bg: #0f1117;
+  --color-bg: #090D1A;
   --color-sidebar: #0a0c11;
   --color-sidebar-border: rgba(255,255,255,0.06);
-  --color-card: #13161f;
+  --color-card: #111827;
   --color-card-border: rgba(255,255,255,0.07);
   --color-primary: #f0f0f8;
   --color-muted: #6b7280;
-  --color-accent: #f97316;
+  --color-accent: #6366F1;
   font-family: 'DM Sans', sans-serif;
 }
 
 .dark {
-  --color-bg: #0f1117;
+  --color-bg: #090D1A;
   --color-sidebar: #0a0c11;
   --color-sidebar-border: rgba(255,255,255,0.06);
-  --color-card: #13161f;
+  --color-card: #111827;
   --color-card-border: rgba(255,255,255,0.07);
   --color-primary: #f0f0f8;
   --color-muted: #6b7280;
@@ -87,8 +87,8 @@ body {
   }
 
   .input:focus {
-    border-color: #f97316;
-    box-shadow: 0 0 0 3px rgba(249,115,22,0.1);
+    border-color: #6366F1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
   }
 
   .input::placeholder {
@@ -96,7 +96,7 @@ body {
   }
 
   select.input option {
-    background-color: #1a1d28;
+    background-color: #111827;
     color: var(--color-primary);
   }
 

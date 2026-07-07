@@ -175,7 +175,7 @@ export default function Dashboard() {
           value={`AED ${monthSavings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
           sub={`≈ ${formatCurrency(monthSavingsInr, 'INR')}`}
           icon={<PiggyBank size={16} />}
-          color="blue"
+          color="cyan"
         />
         <StatCard
           title="Savings Rate"
@@ -198,9 +198,9 @@ export default function Dashboard() {
       </div>
 
       {/* Exchange rate banner */}
-      <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-[#A6445D]/10 to-[#C75B76]/10 border border-[#A6445D]/20">
-        <ArrowRightLeft size={16} className="text-[#A6445D] shrink-0" />
-        <span className="text-sm text-[#C75B76]">
+      <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-[#6366F1]/10 to-[#818CF8]/10 border border-[#6366F1]/20">
+        <ArrowRightLeft size={16} className="text-[#6366F1] shrink-0" />
+        <span className="text-sm text-[#818CF8]">
           <span className="font-semibold">{salaryRateMap.has(currentMonth) ? "This Month's Salary Rate:" : 'Live Rate:'}</span> 1 AED = ₹{currentMonthRate.toFixed(2)} INR &nbsp;·&nbsp;
           AED {monthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })} = ₹{(monthIncome * currentMonthRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
         </span>
@@ -220,12 +220,12 @@ export default function Dashboard() {
                 <Tooltip content={<CustomTooltip aedToInrRate={aedToInrRate} />} />
                 <Bar dataKey="income" fill="#22c55e" radius={[4, 4, 0, 0]} name="income" />
                 <Bar dataKey="expenses" fill="#ef4444" radius={[4, 4, 0, 0]} name="expenses" />
-                <Bar dataKey="savings" fill="#3b82f6" radius={[4, 4, 0, 0]} name="savings" />
+                <Bar dataKey="savings" fill="#06b6d4" radius={[4, 4, 0, 0]} name="savings" />
               </BarChart>
             </ResponsiveContainer>
           )}
           <div className="flex gap-4 mt-2 justify-end">
-            {[{ label: 'Income', color: '#22c55e' }, { label: 'Expenses', color: '#ef4444' }, { label: 'Savings', color: '#3b82f6' }].map(l => (
+            {[{ label: 'Income', color: '#22c55e' }, { label: 'Expenses', color: '#ef4444' }, { label: 'Savings', color: '#06b6d4' }].map(l => (
               <div key={l.label} className="flex items-center gap-1.5 text-xs text-muted">
                 <div className="w-2.5 h-2.5 rounded-sm" style={{ background: l.color }} />
                 {l.label}

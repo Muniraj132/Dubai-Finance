@@ -473,7 +473,7 @@ export default function ChitFunds() {
                             {(inst.status === 'pending' || inst.status === 'partial' || inst.status === 'missed') && (
                               <button
                                 onClick={() => openPay(inst)}
-                                className="px-2 py-1 text-xs rounded-md bg-[#A6445D]/15 text-[#A6445D] hover:bg-[#A6445D]/25 transition-colors font-medium"
+                                className="px-2 py-1 text-xs rounded-md bg-[#6366F1]/15 text-[#6366F1] hover:bg-[#6366F1]/25 transition-colors font-medium"
                               >
                                 Pay
                               </button>

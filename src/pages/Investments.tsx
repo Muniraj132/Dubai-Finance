@@ -741,8 +741,8 @@ export default function Investments() {
                 </Select>
               </FormField>
               {Number(txnForm.units) > 0 && Number(txnForm.pricePerUnit) > 0 && (
-                <div className="p-3 rounded-lg bg-[#A6445D]/10 border border-[#A6445D]/20 text-sm">
-                  <span className="text-[#A6445D] font-medium">
+                <div className="p-3 rounded-lg bg-[#6366F1]/10 border border-[#6366F1]/20 text-sm">
+                  <span className="text-[#6366F1] font-medium">
                     Total: {txnForm.currency} {(Number(txnForm.units) * Number(txnForm.pricePerUnit)).toLocaleString('en-AE', { maximumFractionDigits: 2 })}
                   </span>
                 </div>

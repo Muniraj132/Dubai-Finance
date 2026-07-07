@@ -103,9 +103,9 @@ export default function DubaiLife() {
       <PageHeader title="Dubai Life" subtitle="Your personal journey dashboard" />
 
       {/* Hero */}
-      <div className="card bg-gradient-to-br from-[#A6445D]/15 to-[#C75B76]/10 border-[#A6445D]/20 text-center py-8">
+      <div className="card bg-gradient-to-br from-[#6366F1]/15 to-[#818CF8]/10 border-[#6366F1]/20 text-center py-8">
         <div className="flex justify-center mb-3">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#C75B76] to-[#A6445D] flex items-center justify-center shadow-lg shadow-[#A6445D]/30">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#818CF8] to-[#6366F1] flex items-center justify-center shadow-lg shadow-[#6366F1]/30">
             <Palmtree size={28} className="text-white" />
           </div>
         </div>
@@ -130,7 +130,7 @@ export default function DubaiLife() {
           value={`AED ${totalSavings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
           sub={`${savingsRate.toFixed(1)}% savings rate`}
           icon={<PiggyBank size={16} />}
-          color="blue"
+          color="cyan"
         />
         <StatCard
           title="Gold Purchased"
@@ -164,7 +164,7 @@ export default function DubaiLife() {
         </div>
         <div className="card text-center">
           <div className="text-xs text-muted mb-1">Daily Saving (avg)</div>
-          <div className={`text-xl font-bold ${dailySaving >= 0 ? 'text-blue-400' : 'text-red-400'}`}>AED {dailySaving.toFixed(0)}</div>
+          <div className={`text-xl font-bold ${dailySaving >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>AED {dailySaving.toFixed(0)}</div>
           <div className="text-xs text-muted">≈ ₹{dailySavingInr.toFixed(0)}/day</div>
         </div>
       </div>

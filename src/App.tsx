@@ -25,7 +25,7 @@ const ChitFunds = lazy(() => import('./pages/ChitFund'));
 
 const RouteFallback = () => (
   <div className="min-h-screen bg-main flex items-center justify-center">
-    <div className="w-8 h-8 rounded-full border-2 border-[#A6445D] border-t-transparent animate-spin" />
+    <div className="w-8 h-8 rounded-full border-2 border-[#6366F1] border-t-transparent animate-spin" />
   </div>
 );
 
@@ -51,7 +51,7 @@ function AppContent() {
   if (loading) {
     return (
       <div className="min-h-screen bg-main flex items-center justify-center">
-        <div className="w-8 h-8 rounded-full border-2 border-[#A6445D] border-t-transparent animate-spin" />
+        <div className="w-8 h-8 rounded-full border-2 border-[#6366F1] border-t-transparent animate-spin" />
       </div>
     );
   }

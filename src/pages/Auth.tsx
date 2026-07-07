@@ -40,7 +40,7 @@ export default function Auth() {
 
         {/* Branding */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#C75B76] to-[#A6445D] flex items-center justify-center shadow-xl shadow-[#A6445D]/30 mb-3">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#818CF8] to-[#6366F1] flex items-center justify-center shadow-xl shadow-[#6366F1]/30 mb-3">
             <Palmtree size={24} className="text-white" />
           </div>
           <h1 className="text-xl font-bold text-primary tracking-tight">Dubai Finance</h1>
@@ -57,7 +57,7 @@ export default function Auth() {
                 onClick={() => switchMode(m)}
                 className={`flex-1 py-2 rounded-md text-sm font-medium transition-all duration-150 ${
                   mode === m
-                    ? 'bg-[#A6445D] text-white shadow-sm shadow-[#A6445D]/30'
+                    ? 'bg-[#6366F1] text-white shadow-sm shadow-[#6366F1]/30'
                     : 'text-muted hover:text-primary'
                 }`}
               >
@@ -71,12 +71,12 @@ export default function Auth() {
               <div className="text-2xl">✉️</div>
               <p className="text-sm font-medium text-primary">Check your email</p>
               <p className="text-xs text-muted">
-                We sent a confirmation link to <span className="text-[#A6445D]">{email}</span>.
+                We sent a confirmation link to <span className="text-[#6366F1]">{email}</span>.
                 Confirm then sign in.
               </p>
               <button
                 onClick={() => { setRegistered(false); switchMode('login'); }}
-                className="text-xs text-[#A6445D] hover:text-[#C75B76] underline mt-2 inline-block"
+                className="text-xs text-[#6366F1] hover:text-[#818CF8] underline mt-2 inline-block"
               >
                 Back to Sign In
               </button>
