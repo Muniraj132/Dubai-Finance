@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { useAppStore, useSettings } from '../../stores/useAppStore';
 import { useAuthStore } from '../../stores/useAuthStore';
+import WelcomeModal from '../WelcomeModal';
+import LiveClock from '../LiveClock';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -50,6 +52,8 @@ export default function Layout() {
 
   return (
     <div className={`min-h-screen flex ${settings.theme === 'dark' ? 'dark' : ''}`}>
+      <WelcomeModal />
+
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -157,6 +161,11 @@ export default function Layout() {
             {settings.theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
         </header>
+
+        {/* Live clock — visible on every page, every breakpoint */}
+        <div className="flex items-center justify-end px-4 md:px-6 lg:px-8 py-2 border-b border-card-border bg-main">
+          <LiveClock />
+        </div>
 
         {lastError && (
           <div className="mx-4 mt-4 md:mx-6 lg:mx-8 px-4 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center justify-center gap-2">

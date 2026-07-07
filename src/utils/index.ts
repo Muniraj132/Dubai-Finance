@@ -1,4 +1,4 @@
-import { Expense, Income, MonthlyStats, Investment, InvestmentTransaction } from '../types';
+import { Expense, Income, MonthlyStats, Investment, InvestmentTransaction, AppSettings } from '../types';
 
 export const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -243,4 +243,95 @@ export const computePortfolioStats = (
   }, { investedAed: 0, investedInr: 0, dividendsAed: 0, dividendsInr: 0, currentValueAed: 0, currentValueInr: 0, gainAed: 0, gainInr: 0 });
   const gainPct = totals.investedAed > 0 ? (totals.gainAed / totals.investedAed) * 100 : 0;
   return { ...totals, gainPct };
+};
+
+export interface WelcomeInsight {
+  emoji: string;
+  message: string;
+}
+
+// Day-of-year, used to deterministically rotate phrasing variants — same
+// input always produces the same output (still a pure function, no
+// Math.random()), but consecutive days land on different variants instead
+// of repeating the same sentence for a week straight.
+const dayOfYear = (date: Date): number => {
+  const start = new Date(date.getFullYear(), 0, 0);
+  return Math.floor((date.getTime() - start.getTime()) / 86400000);
+};
+
+const pickVariant = <T,>(variants: T[], seed: number): T => variants[seed % variants.length];
+
+// Picks the single most positive, genuinely data-driven thing to greet the
+// user with on their first login of the day — a rare Dubai-days milestone
+// takes priority, then this month's savings, then the most recent past
+// month that had positive savings, then investment growth, and finally a
+// generic (but still true-for-everyone) fallback for brand-new accounts.
+// Each tier has a few phrasing variants so the same underlying fact doesn't
+// read as the exact same sentence on consecutive days.
+export const getWelcomeInsight = (
+  expenses: Expense[],
+  incomes: Income[],
+  investments: Investment[],
+  investmentTransactions: InvestmentTransaction[],
+  settings: AppSettings
+): WelcomeInsight => {
+  const rate = settings.aedToInrRate;
+  const seed = dayOfYear(new Date());
+
+  if (settings.dubaiArrivalDate) {
+    const days = Math.max(0, Math.floor((Date.now() - new Date(settings.dubaiArrivalDate).getTime()) / 86400000));
+    if (days > 0 && days % 100 === 0) {
+      const message = pickVariant([
+        `Day ${days} of your Dubai journey — quite a milestone!`,
+        `${days} days in Dubai today. Look how far you've come!`,
+        `Milestone unlocked: Day ${days} in Dubai.`,
+      ], seed);
+      return { emoji: '🎉', message };
+    }
+  }
+
+  const monthlyStats = computeMonthlyStats(expenses, incomes, rate);
+  const currentMonth = getCurrentMonthKey();
+  const currentStats = monthlyStats.find(s => s.month === currentMonth);
+  if (currentStats && currentStats.savings > 0) {
+    const aed = Math.round(currentStats.savings).toLocaleString('en-AE');
+    const inr = Math.round(currentStats.savingsInr).toLocaleString('en-IN');
+    const message = pickVariant([
+      `You've saved AED ${aed} (≈₹${inr}) so far this month. Keep it up!`,
+      `AED ${aed} saved this month already (≈₹${inr}) — nice discipline.`,
+      `You're AED ${aed} ahead this month (≈₹${inr}). Keep the streak going!`,
+    ], seed);
+    return { emoji: '💰', message };
+  }
+
+  const pastPositive = [...monthlyStats].reverse().find(s => s.month !== currentMonth && s.savings > 0);
+  if (pastPositive) {
+    const label = getMonthLabel(pastPositive.month);
+    const aed = Math.round(pastPositive.savings).toLocaleString('en-AE');
+    const message = pickVariant([
+      `In ${label} you saved AED ${aed} — great momentum to build on.`,
+      `${label} was a strong month: AED ${aed} saved. Let's keep that going.`,
+      `Looking back, ${label} added AED ${aed} to your savings.`,
+    ], seed);
+    return { emoji: '📈', message };
+  }
+
+  const portfolioStats = computePortfolioStats(investments, investmentTransactions, rate);
+  if (portfolioStats.gainAed > 0) {
+    const aed = Math.round(portfolioStats.gainAed).toLocaleString('en-AE');
+    const inr = Math.round(portfolioStats.gainInr).toLocaleString('en-IN');
+    const message = pickVariant([
+      `Your investments are up AED ${aed} (≈₹${inr}) overall.`,
+      `Portfolio update: up AED ${aed} (≈₹${inr}) since you started investing.`,
+      `Your investments have grown by AED ${aed} (≈₹${inr}) — steady progress.`,
+    ], seed);
+    return { emoji: '📊', message };
+  }
+
+  const message = pickVariant([
+    'Welcome back! Every day you track brings you closer to your goals.',
+    'Welcome back! Small consistent steps add up over time.',
+    'Good to see you again — tracking today is a win in itself.',
+  ], seed);
+  return { emoji: '👋', message };
 };
