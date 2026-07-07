@@ -189,7 +189,10 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
 
     addIncome: async (income) => {
-      const rate = get().settings.aedToInrRate;
+      // Salary entries let the user type in the exact rate their bank/exchange
+      // used that day, since the auto-fetched market rate can differ from it.
+      // Falls back to the live rate when the form doesn't override it.
+      const rate = income.exchangeRateUsed ?? get().settings.aedToInrRate;
       const newIncome: Income = {
         ...income,
         id: generateId(),
@@ -203,8 +206,12 @@ export const useAppStore = create<AppState>()((set, get) => {
     },
     updateIncome: async (id, patch) => {
       const existing = get().incomes.find((i) => i.id === id);
-      const extra = existing && (patch.amount !== undefined || patch.currency !== undefined)
-        ? snapshotRates(patch.amount ?? existing.amount, patch.currency ?? existing.currency, get().settings.aedToInrRate)
+      const extra = existing && (patch.amount !== undefined || patch.currency !== undefined || patch.exchangeRateUsed !== undefined)
+        ? snapshotRates(
+            patch.amount ?? existing.amount,
+            patch.currency ?? existing.currency,
+            patch.exchangeRateUsed ?? existing.exchangeRateUsed ?? get().settings.aedToInrRate
+          )
         : {};
       const fullPatch = { ...patch, ...extra };
       await writeThrough('incomes', get().incomes.map((i) => (i.id === id ? { ...i, ...fullPatch } : i)), () =>

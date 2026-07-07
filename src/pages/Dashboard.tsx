@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { TrendingUp, TrendingDown, PiggyBank, Percent, ArrowRightLeft, AlertTriangle, Landmark } from 'lucide-react';
 import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useSettings } from '../stores/useAppStore';
 import { StatCard } from '../components/ui';
-import { resolveAed, resolveInr, formatCurrency, getCurrentMonthKey, getMonthKey, getMonthLabel, computeMonthlyStats, CATEGORY_COLORS } from '../utils';
+import { resolveAed, resolveInr, formatCurrency, getCurrentMonthKey, getMonthKey, getMonthLabel, computeMonthlyStats, buildSalaryRateMap, getMonthSalaryRate, CATEGORY_COLORS } from '../utils';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -39,27 +39,26 @@ export default function Dashboard() {
 
   const currentMonth = getCurrentMonthKey();
 
+  // Every AED figure for a given month is valued at that month's salary
+  // conversion rate (see buildSalaryRateMap) instead of each transaction's
+  // own frozen/live rate — so "balance after expenses" reflects real
+  // converted rupees, not a rate that drifted day to day within the month.
+  const salaryRateMap = useMemo(() => buildSalaryRateMap(incomes, aedToInrRate), [incomes, aedToInrRate]);
+  const currentMonthRate = getMonthSalaryRate(currentMonth, salaryRateMap, aedToInrRate);
+
   const monthExpenses = useMemo(() =>
     expenses.filter(e => getMonthKey(e.date) === currentMonth)
       .reduce((sum, e) => sum + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
     [expenses, currentMonth, aedToInrRate]
   );
-  const monthExpensesInr = useMemo(() =>
-    expenses.filter(e => getMonthKey(e.date) === currentMonth)
-      .reduce((sum, e) => sum + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
-    [expenses, currentMonth, aedToInrRate]
-  );
+  const monthExpensesInr = useMemo(() => monthExpenses * currentMonthRate, [monthExpenses, currentMonthRate]);
 
   const monthIncome = useMemo(() =>
     incomes.filter(i => getMonthKey(i.date) === currentMonth)
       .reduce((sum, i) => sum + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
     [incomes, currentMonth, aedToInrRate]
   );
-  const monthIncomeInr = useMemo(() =>
-    incomes.filter(i => getMonthKey(i.date) === currentMonth)
-      .reduce((sum, i) => sum + resolveInr(i.amount, i.currency, i.amountInr, aedToInrRate), 0),
-    [incomes, currentMonth, aedToInrRate]
-  );
+  const monthIncomeInr = useMemo(() => monthIncome * currentMonthRate, [monthIncome, currentMonthRate]);
 
   const monthSavings = monthIncome - monthExpenses;
   const monthSavingsInr = monthIncomeInr - monthExpensesInr;
@@ -87,12 +86,18 @@ export default function Dashboard() {
   }, [incomes, expenses, goldPurchases, investments, aedToInrRate]);
 
   const netWorthInr = useMemo(() => {
-    const allTimeIncomeInr = incomes.reduce((s, i) => s + resolveInr(i.amount, i.currency, i.amountInr, aedToInrRate), 0);
-    const allTimeExpensesInr = expenses.reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0);
+    const allTimeIncomeInr = incomes.reduce((s, i) => {
+      const aed = resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate);
+      return s + aed * getMonthSalaryRate(getMonthKey(i.date), salaryRateMap, aedToInrRate);
+    }, 0);
+    const allTimeExpensesInr = expenses.reduce((s, e) => {
+      const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+      return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
+    }, 0);
     const goldValueInr = goldPurchases.reduce((s, g) => s + resolveInr(g.weightGrams * g.pricePerGram, g.currency, g.totalValueInr, aedToInrRate), 0);
     const investmentsValueInr = investments.reduce((s, i) => s + resolveInr(i.currentValue, i.currency, i.currentValueInr, aedToInrRate), 0);
     return (allTimeIncomeInr - allTimeExpensesInr) + goldValueInr + investmentsValueInr;
-  }, [incomes, expenses, goldPurchases, investments, aedToInrRate]);
+  }, [incomes, expenses, goldPurchases, investments, aedToInrRate, salaryRateMap]);
 
   const chartData = monthlyStats.map(s => ({
     month: getMonthLabel(s.month),
@@ -110,13 +115,12 @@ export default function Dashboard() {
       .filter(e => getMonthKey(e.date) === currentMonth)
       .forEach(e => {
         const amt = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
-        const amtInr = resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate);
         const prev = map.get(e.category) ?? { value: 0, valueInr: 0 };
-        map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amtInr });
+        map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amt * currentMonthRate });
       });
     return Array.from(map.entries()).map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
       .sort((a, b) => b.value - a.value);
-  }, [expenses, currentMonth, aedToInrRate]);
+  }, [expenses, currentMonth, aedToInrRate, currentMonthRate]);
 
   return (
     <div className="space-y-6">
@@ -196,8 +200,8 @@ export default function Dashboard() {
       <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-[#A6445D]/10 to-[#C75B76]/10 border border-[#A6445D]/20">
         <ArrowRightLeft size={16} className="text-[#A6445D] shrink-0" />
         <span className="text-sm text-[#C75B76]">
-          <span className="font-semibold">Live Rate:</span> 1 AED = ₹{aedToInrRate} INR &nbsp;·&nbsp;
-          AED {monthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })} = ₹{(monthIncome * aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+          <span className="font-semibold">{salaryRateMap.has(currentMonth) ? "This Month's Salary Rate:" : 'Live Rate:'}</span> 1 AED = ₹{currentMonthRate.toFixed(2)} INR &nbsp;·&nbsp;
+          AED {monthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })} = ₹{(monthIncome * currentMonthRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
         </span>
       </div>
 
@@ -273,8 +277,9 @@ export default function Dashboard() {
         ) : (
           <div className="space-y-2">
             {expenses.slice(0, 5).map(exp => {
-              const inAED = resolveAed(exp.amount, exp.currency, exp.amountAed, aedToInrRate);
-              const inINR = resolveInr(exp.amount, exp.currency, exp.amountInr, aedToInrRate);
+              const expMonthRate = getMonthSalaryRate(getMonthKey(exp.date), salaryRateMap, aedToInrRate);
+              const inAED = exp.currency === 'AED' ? exp.amount : exp.amount / expMonthRate;
+              const inINR = exp.currency === 'AED' ? exp.amount * expMonthRate : exp.amount;
               return (
                 <div key={exp.id} className="flex items-center justify-between py-2 border-b border-card-border last:border-0">
                   <div className="flex items-center gap-3">

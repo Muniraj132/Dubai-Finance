@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Palmtree, Calendar, TrendingUp, PiggyBank, Gem, Heart, LineChart } from 'lucide-react';
 import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useInvestmentTransactions, useSettings } from '../stores/useAppStore';
 import { PageHeader, StatCard } from '../components/ui';
-import { resolveAed, resolveInr, formatCurrency, computePortfolioStats, EXPENSE_CATEGORIES } from '../utils';
+import { resolveAed, formatCurrency, computePortfolioStats, EXPENSE_CATEGORIES, getMonthKey, buildSalaryRateMap, getMonthSalaryRate } from '../utils';
 
 export default function DubaiLife() {
   const expenses = useExpenses();
@@ -12,6 +12,11 @@ export default function DubaiLife() {
   const investmentTransactions = useInvestmentTransactions();
   const settings = useSettings();
   const { aedToInrRate, dubaiArrivalDate } = settings;
+
+  // Every AED figure is valued at that transaction's month's salary
+  // conversion rate (see buildSalaryRateMap in utils), matching
+  // Dashboard/Expenses/Analytics so "total savings" is consistent app-wide.
+  const salaryRateMap = useMemo(() => buildSalaryRateMap(incomes, aedToInrRate), [incomes, aedToInrRate]);
 
   const daysInDubai = useMemo(() => {
     if (!dubaiArrivalDate) return 0;
@@ -24,8 +29,11 @@ export default function DubaiLife() {
     [incomes, aedToInrRate]
   );
   const totalEarningsInr = useMemo(() =>
-    incomes.reduce((s, i) => s + resolveInr(i.amount, i.currency, i.amountInr, aedToInrRate), 0),
-    [incomes, aedToInrRate]
+    incomes.reduce((s, i) => {
+      const aed = resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate);
+      return s + aed * getMonthSalaryRate(getMonthKey(i.date), salaryRateMap, aedToInrRate);
+    }, 0),
+    [incomes, aedToInrRate, salaryRateMap]
   );
 
   const totalExpenses = useMemo(() =>
@@ -33,8 +41,11 @@ export default function DubaiLife() {
     [expenses, aedToInrRate]
   );
   const totalExpensesInr = useMemo(() =>
-    expenses.reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
-    [expenses, aedToInrRate]
+    expenses.reduce((s, e) => {
+      const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+      return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
+    }, 0),
+    [expenses, aedToInrRate, salaryRateMap]
   );
 
   const totalSavings = totalEarnings - totalExpenses;
@@ -65,8 +76,11 @@ export default function DubaiLife() {
   );
   const familySupportInr = useMemo(() =>
     expenses.filter(e => e.category === 'Family Support')
-      .reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
-    [expenses, aedToInrRate]
+      .reduce((s, e) => {
+        const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+        return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
+      }, 0),
+    [expenses, aedToInrRate, salaryRateMap]
   );
 
   const savingsRate = totalEarnings > 0 ? (totalSavings / totalEarnings) * 100 : 0;

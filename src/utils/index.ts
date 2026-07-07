@@ -44,11 +44,37 @@ export const resolveAed = (amount: number, currency: 'AED' | 'INR', stored: numb
 export const resolveInr = (amount: number, currency: 'AED' | 'INR', stored: number | null | undefined, rate: number): number =>
   stored ?? convertToINR(amount, currency, rate);
 
+// Builds one AED→INR rate per month from that month's Salary income entries
+// (amount-weighted average across multiple entries), so every other AED
+// figure in that month — expenses, other income — is valued at the rate the
+// user's salary was actually converted at, not whatever the live rate
+// happened to be on the day each transaction was logged. Months with no
+// Salary entry fall back to the caller-supplied rate.
+export const buildSalaryRateMap = (incomes: Income[], fallbackRate: number): Map<string, number> => {
+  const groups = new Map<string, { weightedSum: number; totalWeight: number }>();
+  incomes.filter(i => i.source === 'Salary').forEach(i => {
+    const m = getMonthKey(i.date);
+    const weight = resolveAed(i.amount, i.currency, i.amountAed, fallbackRate);
+    const rate = i.exchangeRateUsed ?? fallbackRate;
+    const g = groups.get(m) ?? { weightedSum: 0, totalWeight: 0 };
+    g.weightedSum += rate * weight;
+    g.totalWeight += weight;
+    groups.set(m, g);
+  });
+  const map = new Map<string, number>();
+  groups.forEach((g, m) => map.set(m, g.totalWeight > 0 ? g.weightedSum / g.totalWeight : fallbackRate));
+  return map;
+};
+
+export const getMonthSalaryRate = (month: string, rateMap: Map<string, number>, fallbackRate: number): number =>
+  rateMap.get(month) ?? fallbackRate;
+
 export const computeMonthlyStats = (
   expenses: Expense[],
   incomes: Income[],
   rate: number
 ): MonthlyStats[] => {
+  const rateMap = buildSalaryRateMap(incomes, rate);
   const monthMap = new Map<string, MonthlyStats>();
   const emptyStats = (m: string): MonthlyStats => ({ month: m, income: 0, expenses: 0, savings: 0, incomeInr: 0, expensesInr: 0, savingsInr: 0 });
 
@@ -56,16 +82,18 @@ export const computeMonthlyStats = (
     const m = getMonthKey(inc.date);
     if (!monthMap.has(m)) monthMap.set(m, emptyStats(m));
     const s = monthMap.get(m)!;
-    s.income += resolveAed(inc.amount, inc.currency, inc.amountAed, rate);
-    s.incomeInr += resolveInr(inc.amount, inc.currency, inc.amountInr, rate);
+    const aed = resolveAed(inc.amount, inc.currency, inc.amountAed, rate);
+    s.income += aed;
+    s.incomeInr += aed * getMonthSalaryRate(m, rateMap, rate);
   });
 
   expenses.forEach(exp => {
     const m = getMonthKey(exp.date);
     if (!monthMap.has(m)) monthMap.set(m, emptyStats(m));
     const s = monthMap.get(m)!;
-    s.expenses += resolveAed(exp.amount, exp.currency, exp.amountAed, rate);
-    s.expensesInr += resolveInr(exp.amount, exp.currency, exp.amountInr, rate);
+    const aed = resolveAed(exp.amount, exp.currency, exp.amountAed, rate);
+    s.expenses += aed;
+    s.expensesInr += aed * getMonthSalaryRate(m, rateMap, rate);
   });
 
   return Array.from(monthMap.values())

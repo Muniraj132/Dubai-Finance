@@ -3,7 +3,7 @@ import { Plus, Search, Edit2, Trash2, Filter, AlertTriangle } from 'lucide-react
 import { useAppStore, useExpenses, useSettings, useIncomes } from '../stores/useAppStore';
 import { Expense, ExpenseCategory, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState, Badge } from '../components/ui';
-import { EXPENSE_CATEGORIES, CATEGORY_COLORS, formatDate, getCurrentMonthKey, getMonthKey, resolveAed, resolveInr } from '../utils';
+import { EXPENSE_CATEGORIES, CATEGORY_COLORS, formatDate, getCurrentMonthKey, getMonthKey, resolveAed, buildSalaryRateMap, getMonthSalaryRate } from '../utils';
 
 const defaultForm = (): Omit<Expense, 'id' | 'createdAt'> => ({
   date: new Date().toISOString().split('T')[0],
@@ -49,11 +49,20 @@ export default function Expenses() {
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [expenses, filterMonth, filterCategory, search]);
 
+  // Every AED figure is valued at that transaction's month's salary
+  // conversion rate (see buildSalaryRateMap in utils), not its own
+  // frozen/live rate — so totals reflect real converted rupees.
+  const salaryRateMap = useMemo(() => buildSalaryRateMap(incomes, aedToInrRate), [incomes, aedToInrRate]);
+
   const totalFiltered = filtered.reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0);
-  const totalFilteredINR = filtered.reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0);
+  const totalFilteredINR = filtered.reduce((s, e) => {
+    const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+    return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
+  }, 0);
 
   // Spending warning for current month
   const currentMonth = getCurrentMonthKey();
+  const currentMonthRate = getMonthSalaryRate(currentMonth, salaryRateMap, aedToInrRate);
   const monthlyExpenses = useMemo(() =>
     expenses.filter(e => getMonthKey(e.date) === currentMonth)
       .reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
@@ -64,20 +73,19 @@ export default function Expenses() {
       .reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
     [incomes, currentMonth, aedToInrRate]
   );
-  const monthlyExpensesInr = useMemo(() =>
-    expenses.filter(e => getMonthKey(e.date) === currentMonth)
-      .reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
-    [expenses, currentMonth, aedToInrRate]
-  );
+  const monthlyExpensesInr = useMemo(() => monthlyExpenses * currentMonthRate, [monthlyExpenses, currentMonthRate]);
   const spendingRatio = monthlyIncome > 0 ? monthlyExpenses / monthlyIncome : 0;
   const showOverBudget = filterMonth === currentMonth && monthlyIncome > 0 && spendingRatio >= 1;
   const showHighSpending = filterMonth === currentMonth && monthlyIncome > 0 && spendingRatio >= 0.8 && spendingRatio < 1;
 
-  // Live conversion preview in modal
+  // Conversion preview in modal, valued at the salary rate for the
+  // expense's own month (falls back to the live rate for months with no
+  // salary entry yet) — matches how the saved total will actually count.
+  const formMonthRate = getMonthSalaryRate(getMonthKey(form.date), salaryRateMap, aedToInrRate);
   const convertedAmount = form.amount > 0
     ? form.currency === 'AED'
-      ? form.amount * aedToInrRate
-      : form.amount / aedToInrRate
+      ? form.amount * formMonthRate
+      : form.amount / formMonthRate
     : 0;
   const convertedLabel = form.currency === 'AED'
     ? `≈ ₹${convertedAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })} INR`
@@ -163,8 +171,9 @@ export default function Expenses() {
               </thead>
               <tbody className="divide-y divide-card-border">
                 {filtered.map(exp => {
-                  const inINR = resolveInr(exp.amount, exp.currency, exp.amountInr, aedToInrRate);
-                  const inAED = resolveAed(exp.amount, exp.currency, exp.amountAed, aedToInrRate);
+                  const expMonthRate = getMonthSalaryRate(getMonthKey(exp.date), salaryRateMap, aedToInrRate);
+                  const inAED = exp.currency === 'AED' ? exp.amount : exp.amount / expMonthRate;
+                  const inINR = exp.currency === 'AED' ? exp.amount * expMonthRate : exp.amount;
                   return (
                     <tr key={exp.id} className="hover:bg-white/3 transition-colors group">
                       <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{formatDate(exp.date)}</td>

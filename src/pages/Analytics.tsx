@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
-import { AlertTriangle, CalendarDays } from 'lucide-react';
-import { useExpenses, useIncomes, useInvestments, useInvestmentTransactions, useSettings } from '../stores/useAppStore';
+import { AlertTriangle, Layers } from 'lucide-react';
+import { useExpenses, useIncomes, useInvestments, useInvestmentTransactions, useChitFunds, useChitInstallments, useSettings } from '../stores/useAppStore';
 import { PageHeader } from '../components/ui';
 import {
-  computeMonthlyStats, computeInvestmentStats, getMonthLabel, CATEGORY_COLORS, INVESTMENT_TYPE_COLORS,
-  resolveAed, resolveInr, getCurrentMonthKey, getMonthKey,
+  computeMonthlyStats, computeInvestmentStats, computePortfolioStats, getMonthLabel, CATEGORY_COLORS, INVESTMENT_TYPE_COLORS,
+  resolveAed, getCurrentMonthKey, getMonthKey, buildSalaryRateMap, getMonthSalaryRate,
 } from '../utils';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -40,9 +40,16 @@ export default function Analytics() {
   const incomes = useIncomes();
   const investments = useInvestments();
   const investmentTransactions = useInvestmentTransactions();
+  const chitFunds = useChitFunds();
+  const chitInstallments = useChitInstallments();
   const { aedToInrRate } = useSettings();
   const currentMonth = getCurrentMonthKey();
-  const today = new Date().toISOString().split('T')[0];
+
+  // Every AED figure is valued at that transaction's month's salary
+  // conversion rate (see buildSalaryRateMap in utils), not its own
+  // frozen/live rate — matches Dashboard/Expenses so numbers stay consistent
+  // across pages.
+  const salaryRateMap = useMemo(() => buildSalaryRateMap(incomes, aedToInrRate), [incomes, aedToInrRate]);
 
   const monthlyStats = useMemo(() => computeMonthlyStats(expenses, incomes, aedToInrRate), [expenses, incomes, aedToInrRate]);
   const chartData = monthlyStats.slice(-12).map(s => ({
@@ -55,27 +62,41 @@ export default function Analytics() {
     savingsInr: Math.round(s.savingsInr),
   }));
 
-  // Today's summary
-  const todayExpenses = useMemo(() =>
-    expenses.filter(e => e.date === today)
-      .reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
-    [expenses, today, aedToInrRate]
+  const currentMonthRate = getMonthSalaryRate(currentMonth, salaryRateMap, aedToInrRate);
+
+  // Overall (all-time) summary — income/expenses valued per-transaction at
+  // that month's salary rate, same model as Dashboard's net worth.
+  const allTimeIncome = useMemo(() =>
+    incomes.reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
+    [incomes, aedToInrRate]
   );
-  const todayExpensesInr = useMemo(() =>
-    expenses.filter(e => e.date === today)
-      .reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
-    [expenses, today, aedToInrRate]
+  const allTimeIncomeInr = useMemo(() =>
+    incomes.reduce((s, i) => {
+      const aed = resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate);
+      return s + aed * getMonthSalaryRate(getMonthKey(i.date), salaryRateMap, aedToInrRate);
+    }, 0),
+    [incomes, aedToInrRate, salaryRateMap]
   );
-  const todayIncome = useMemo(() =>
-    incomes.filter(i => i.date === today)
-      .reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
-    [incomes, today, aedToInrRate]
+  const allTimeExpenses = useMemo(() =>
+    expenses.reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
+    [expenses, aedToInrRate]
   );
-  const todayIncomeInr = useMemo(() =>
-    incomes.filter(i => i.date === today)
-      .reduce((s, i) => s + resolveInr(i.amount, i.currency, i.amountInr, aedToInrRate), 0),
-    [incomes, today, aedToInrRate]
+  const allTimeExpensesInr = useMemo(() =>
+    expenses.reduce((s, e) => {
+      const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+      return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
+    }, 0),
+    [expenses, aedToInrRate, salaryRateMap]
   );
+  const portfolioStats = useMemo(
+    () => computePortfolioStats(investments, investmentTransactions, aedToInrRate),
+    [investments, investmentTransactions, aedToInrRate]
+  );
+  const chitStats = useMemo(() => {
+    const totalPaid = chitInstallments.reduce((s, i) => s + (i.paid_amount ?? 0), 0);
+    const totalCommitted = chitFunds.reduce((s, c) => s + c.total_amount, 0);
+    return { totalPaid, totalCommitted };
+  }, [chitFunds, chitInstallments]);
 
   // Current month totals for spending warning
   const currentMonthExpenses = useMemo(() =>
@@ -83,11 +104,7 @@ export default function Analytics() {
       .reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
     [expenses, currentMonth, aedToInrRate]
   );
-  const currentMonthExpensesInr = useMemo(() =>
-    expenses.filter(e => getMonthKey(e.date) === currentMonth)
-      .reduce((s, e) => s + resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate), 0),
-    [expenses, currentMonth, aedToInrRate]
-  );
+  const currentMonthExpensesInr = useMemo(() => currentMonthExpenses * currentMonthRate, [currentMonthExpenses, currentMonthRate]);
   const currentMonthIncome = useMemo(() =>
     incomes.filter(i => getMonthKey(i.date) === currentMonth)
       .reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
@@ -101,27 +118,26 @@ export default function Analytics() {
     const map = new Map<string, { value: number; valueInr: number }>();
     expenses.forEach(e => {
       const amt = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
-      const amtInr = resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate);
+      const rate = getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
       const prev = map.get(e.category) ?? { value: 0, valueInr: 0 };
-      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amtInr });
+      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amt * rate });
     });
     return Array.from(map.entries())
       .map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
       .sort((a, b) => b.value - a.value);
-  }, [expenses, aedToInrRate]);
+  }, [expenses, aedToInrRate, salaryRateMap]);
 
   const currentMonthCategoryData = useMemo(() => {
     const map = new Map<string, { value: number; valueInr: number }>();
     expenses.filter(e => getMonthKey(e.date) === currentMonth).forEach(e => {
       const amt = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
-      const amtInr = resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate);
       const prev = map.get(e.category) ?? { value: 0, valueInr: 0 };
-      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amtInr });
+      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amt * currentMonthRate });
     });
     return Array.from(map.entries())
       .map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
       .sort((a, b) => b.value - a.value);
-  }, [expenses, currentMonth, aedToInrRate]);
+  }, [expenses, currentMonth, aedToInrRate, currentMonthRate]);
 
   const portfolioAllocation = useMemo(() => {
     const map = new Map<string, { value: number; valueInr: number }>();
@@ -179,30 +195,48 @@ export default function Analytics() {
         </div>
       )}
 
-      {/* Today's Summary */}
+      {/* Overall Summary */}
       <div className="card">
         <div className="flex items-center gap-2 mb-4">
-          <CalendarDays size={15} className="text-[#A6445D]" />
-          <h2 className="text-sm font-semibold text-primary">Today's Summary</h2>
-          <span className="text-xs text-muted ml-auto">{today}</span>
+          <Layers size={15} className="text-[#A6445D]" />
+          <h2 className="text-sm font-semibold text-primary">Overall Summary</h2>
+          <span className="text-xs text-muted ml-auto">All-time</span>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="rounded-xl bg-red-500/5 border border-red-500/15 px-4 py-3">
-            <div className="text-xs text-muted mb-1">Expenses Today</div>
-            <div className="text-lg font-bold text-red-600 dark:text-red-400">
-              AED {todayExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="rounded-xl bg-green-500/5 border border-green-500/15 px-4 py-3">
+            <div className="text-xs text-muted mb-1">Total Income</div>
+            <div className="text-lg font-bold text-green-600 dark:text-green-400">
+              AED {allTimeIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
             </div>
             <div className="text-xs text-muted mt-0.5">
-              ≈ ₹{todayExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              ≈ ₹{allTimeIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
           </div>
-          <div className="rounded-xl bg-green-500/5 border border-green-500/15 px-4 py-3">
-            <div className="text-xs text-muted mb-1">Income Today</div>
-            <div className="text-lg font-bold text-green-600 dark:text-green-400">
-              AED {todayIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+          <div className="rounded-xl bg-red-500/5 border border-red-500/15 px-4 py-3">
+            <div className="text-xs text-muted mb-1">Total Expenses</div>
+            <div className="text-lg font-bold text-red-600 dark:text-red-400">
+              AED {allTimeExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
             </div>
             <div className="text-xs text-muted mt-0.5">
-              ≈ ₹{todayIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              ≈ ₹{allTimeExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </div>
+          </div>
+          <div className="rounded-xl bg-blue-500/5 border border-blue-500/15 px-4 py-3">
+            <div className="text-xs text-muted mb-1">Investments</div>
+            <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
+              AED {portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+            </div>
+            <div className="text-xs text-muted mt-0.5">
+              ≈ ₹{portfolioStats.currentValueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </div>
+          </div>
+          <div className="rounded-xl bg-purple-500/5 border border-purple-500/15 px-4 py-3">
+            <div className="text-xs text-muted mb-1">Chit Fund Paid</div>
+            <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
+              ₹{chitStats.totalPaid.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </div>
+            <div className="text-xs text-muted mt-0.5">
+              of ₹{chitStats.totalCommitted.toLocaleString('en-IN', { maximumFractionDigits: 0 })} committed
             </div>
           </div>
         </div>

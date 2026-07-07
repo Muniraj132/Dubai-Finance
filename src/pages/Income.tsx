@@ -3,7 +3,7 @@ import { Plus, Edit2, Trash2, TrendingUp, CircleCheck } from 'lucide-react';
 import { useAppStore, useIncomes, useSettings } from '../stores/useAppStore';
 import { Income, IncomeSource, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState } from '../components/ui';
-import { formatDate, getCurrentMonthKey, getMonthKey, resolveAed } from '../utils';
+import { formatDate, getCurrentMonthKey, getMonthKey, resolveAed, resolveInr } from '../utils';
 
 const SOURCES: IncomeSource[] = ['Salary', 'Bonus', 'Freelance', 'Others'];
 const SOURCE_COLORS: Record<string, string> = { Salary: '#22c55e', Bonus: '#f59e0b', Freelance: '#3b82f6', Others: '#8b5cf6' };
@@ -44,10 +44,18 @@ export default function IncomePage() {
   );
 
   const total = filtered.reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, settings.aedToInrRate), 0);
+  const totalInr = filtered.reduce((s, i) => s + resolveInr(i.amount, i.currency, i.amountInr, settings.aedToInrRate), 0);
 
-  const openAdd = () => { setForm(defaultForm()); setEditId(null); setModalOpen(true); };
+  const openAdd = () => { setForm({ ...defaultForm(), exchangeRateUsed: settings.aedToInrRate }); setEditId(null); setModalOpen(true); };
   const openEdit = (inc: Income) => {
-    setForm({ date: inc.date, amount: inc.amount, currency: inc.currency, source: inc.source, notes: inc.notes });
+    setForm({
+      date: inc.date,
+      amount: inc.amount,
+      currency: inc.currency,
+      source: inc.source,
+      notes: inc.notes,
+      exchangeRateUsed: inc.exchangeRateUsed ?? settings.aedToInrRate,
+    });
     setEditId(inc.id);
     setModalOpen(true);
   };
@@ -63,7 +71,7 @@ export default function IncomePage() {
     <div className="space-y-5">
       <PageHeader
         title="Income"
-        subtitle={`${filtered.length} entries · AED ${total.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+        subtitle={`${filtered.length} entries · AED ${total.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · ₹${totalInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
         action={<Button onClick={openAdd}><Plus size={16} /> Add Income</Button>}
       />
       <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/30">
@@ -95,6 +103,7 @@ export default function IncomePage() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Source</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide hidden sm:table-cell">Notes</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Amount</th>
+                <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Amount (INR)</th>
                 <th className="px-4 py-3 w-16"></th>
               </tr>
             </thead>
@@ -114,6 +123,12 @@ export default function IncomePage() {
                   <td className="px-4 py-3 text-muted text-xs hidden sm:table-cell max-w-[200px] truncate">{inc.notes || '—'}</td>
                   <td className="px-4 py-3 text-right font-semibold text-green-400 whitespace-nowrap">
                     +{inc.currency} {inc.amount.toLocaleString('en-AE', { maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-4 py-3 text-right text-muted text-xs whitespace-nowrap">
+                    ₹{resolveInr(inc.amount, inc.currency, inc.amountInr, settings.aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                    {inc.exchangeRateUsed != null && (
+                      <div className="text-[10px] text-muted/60">@ {inc.exchangeRateUsed.toFixed(2)}</div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -143,6 +158,19 @@ export default function IncomePage() {
           </div>
           <FormField label="Amount">
             <Input type="number" min="0" step="0.01" value={form.amount || ''} onChange={e => setForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} placeholder="0.00" />
+          </FormField>
+          <FormField label="Exchange Rate (1 AED = ? INR)">
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.exchangeRateUsed ?? ''}
+              onChange={e => setForm(f => ({ ...f, exchangeRateUsed: parseFloat(e.target.value) || 0 }))}
+              placeholder={String(settings.aedToInrRate)}
+            />
+            <div className="text-[11px] text-muted mt-1">
+              Defaults to today's rate ({settings.aedToInrRate}). Override with the exact rate your bank used — it's locked to this entry and won't change later.
+            </div>
           </FormField>
           <FormField label="Source">
             <Select value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value as IncomeSource }))}>
