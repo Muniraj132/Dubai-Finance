@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { supabase } from '../utils/supabase';
+import { useAuthStore } from './useAuthStore';
 import { Expense, Income, Goal, Budget, GoldPurchase, AppSettings, ChitFund, ChitInstallment, Investment, InvestmentTransaction, Currency } from '../types';
 import { generateId, convertToAED, convertToINR } from '../utils';
 
-const getUid = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user!.id;
-};
+// useAuthStore already keeps the logged-in user in memory (synced via
+// onAuthStateChange), so this avoids an extra network round-trip to
+// supabase.auth.getUser() before every single insert.
+const getUid = () => useAuthStore.getState().user!.id;
 
 const snapshotRates = (amount: number, currency: Currency, rate: number) => ({
   amountAed: convertToAED(amount, currency, rate),
@@ -167,7 +168,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         createdAt: new Date().toISOString(),
         ...snapshotRates(expense.amount, expense.currency, rate),
       };
-      const uid = await getUid();
+      const uid = getUid();
       await writeThrough('expenses', [newExpense, ...get().expenses], () =>
         supabase.from('expenses').insert({ ...newExpense, user_id: uid })
       );
@@ -199,7 +200,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         createdAt: new Date().toISOString(),
         ...snapshotRates(income.amount, income.currency, rate),
       };
-      const uid = await getUid();
+      const uid = getUid();
       await writeThrough('incomes', [newIncome, ...get().incomes], () =>
         supabase.from('incomes').insert({ ...newIncome, user_id: uid })
       );
@@ -236,7 +237,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         currentAmountInr: convertToINR(goal.currentAmount, goal.currency, rate),
         exchangeRateUsed: rate,
       };
-      const uid = await getUid();
+      const uid = getUid();
       await writeThrough('goals', [newGoal, ...get().goals], () =>
         supabase.from('goals').insert({ ...newGoal, user_id: uid })
       );
@@ -282,7 +283,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         );
       } else {
         const newBudget: Budget = { ...withSnapshot, id: generateId() };
-        const uid = await getUid();
+        const uid = getUid();
         await writeThrough('budgets', [...get().budgets, newBudget], () =>
           supabase.from('budgets').insert({ ...newBudget, user_id: uid })
         );
@@ -305,7 +306,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         totalValueInr: convertToINR(totalValue, purchase.currency, rate),
         exchangeRateUsed: rate,
       };
-      const uid = await getUid();
+      const uid = getUid();
       await writeThrough('goldPurchases', [newPurchase, ...get().goldPurchases], () =>
         supabase.from('gold_purchases').insert({ ...newPurchase, user_id: uid })
       );
@@ -338,7 +339,7 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     addChitFund: async (fund) => {
       const newFund: ChitFund = { ...fund, id: generateId(), createdAt: new Date().toISOString() };
-      const uid = await getUid();
+      const uid = getUid();
       await writeThrough('chitFunds', [newFund, ...get().chitFunds], () =>
         supabase.from('chit_funds').insert({ ...newFund, user_id: uid })
       );
@@ -360,7 +361,7 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     addChitInstallment: async (inst) => {
       const newInst: ChitInstallment = { ...inst, id: generateId(), createdAt: new Date().toISOString() };
-      const uid = await getUid();
+      const uid = getUid();
       await writeThrough('chitInstallments', [...get().chitInstallments, newInst], () =>
         supabase.from('chit_installments').insert({ ...newInst, user_id: uid })
       );
@@ -386,7 +387,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         currentValueInr: convertToINR(investment.currentValue, investment.currency, rate),
         exchangeRateUsed: rate,
       };
-      const uid = await getUid();
+      const uid = getUid();
       await writeThrough('investments', [newInvestment, ...get().investments], () =>
         supabase.from('investments').insert({ ...newInvestment, user_id: uid })
       );
@@ -427,7 +428,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         createdAt: new Date().toISOString(),
         ...snapshotRates(txn.amount, txn.currency, rate),
       };
-      const uid = await getUid();
+      const uid = getUid();
       await writeThrough('investmentTransactions', [newTxn, ...get().investmentTransactions], () =>
         supabase.from('investment_transactions').insert({ ...newTxn, user_id: uid })
       );
@@ -450,7 +451,7 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     updateSettings: async (settings) => {
       const merged = { ...get().settings, ...settings };
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = useAuthStore.getState().user;
       await writeThrough('settings', merged, async () => {
         if (!user) return { error: null };
         return supabase.from('settings').upsert({ user_id: user.id, ...merged });

@@ -4,6 +4,7 @@ import { useAppStore, useIncomes, useSettings } from '../stores/useAppStore';
 import { Income, IncomeSource, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState } from '../components/ui';
 import { formatDate, getCurrentMonthKey, getMonthKey, resolveAed, resolveInr } from '../utils';
+import { useMonthOptions } from '../hooks';
 
 const SOURCES: IncomeSource[] = ['Salary', 'Bonus', 'Freelance', 'Others'];
 const SOURCE_COLORS: Record<string, string> = { Salary: '#22c55e', Bonus: '#f59e0b', Freelance: '#3b82f6', Others: '#8b5cf6' };
@@ -27,16 +28,7 @@ export default function IncomePage() {
   const [form, setForm] = useState(defaultForm());
   const [filterMonth, setFilterMonth] = useState(getCurrentMonthKey());
 
-  // Always include the current month, even with zero incomes in it — the
-  // filter defaults to the current month below, and a <select> whose value
-  // doesn't match any of its <option>s falls back to displaying the first
-  // option ("All Months") while still silently filtering by the (missing)
-  // current month underneath. See Expenses.tsx for the same fix.
-  const months = useMemo(() => {
-    const set = new Set(incomes.map(i => getMonthKey(i.date)));
-    set.add(getCurrentMonthKey());
-    return Array.from(set).sort().reverse();
-  }, [incomes]);
+  const months = useMonthOptions(incomes);
 
   const filtered = useMemo(() =>
     filterMonth === 'all' ? incomes : incomes.filter(i => getMonthKey(i.date) === filterMonth),

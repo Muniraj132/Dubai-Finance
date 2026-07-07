@@ -4,8 +4,9 @@ import { useExpenses, useIncomes, useInvestments, useInvestmentTransactions, use
 import { PageHeader } from '../components/ui';
 import {
   computeMonthlyStats, computeInvestmentStats, computePortfolioStats, getMonthLabel, CATEGORY_COLORS, INVESTMENT_TYPE_COLORS,
-  resolveAed, getCurrentMonthKey, getMonthKey, buildSalaryRateMap, getMonthSalaryRate,
+  resolveAed, getCurrentMonthKey, getMonthKey, getMonthSalaryRate,
 } from '../utils';
+import { useSalaryRateMap } from '../hooks';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
@@ -49,7 +50,7 @@ export default function Analytics() {
   // conversion rate (see buildSalaryRateMap in utils), not its own
   // frozen/live rate — matches Dashboard/Expenses so numbers stay consistent
   // across pages.
-  const salaryRateMap = useMemo(() => buildSalaryRateMap(incomes, aedToInrRate), [incomes, aedToInrRate]);
+  const salaryRateMap = useSalaryRateMap(incomes, aedToInrRate);
 
   const monthlyStats = useMemo(() => computeMonthlyStats(expenses, incomes, aedToInrRate), [expenses, incomes, aedToInrRate]);
   const chartData = monthlyStats.slice(-12).map(s => ({

@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { TrendingUp, TrendingDown, PiggyBank, Percent, ArrowRightLeft, AlertTriangle, Landmark } from 'lucide-react';
 import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useSettings } from '../stores/useAppStore';
 import { StatCard } from '../components/ui';
-import { resolveAed, resolveInr, formatCurrency, getCurrentMonthKey, getMonthKey, getMonthLabel, computeMonthlyStats, buildSalaryRateMap, getMonthSalaryRate, CATEGORY_COLORS } from '../utils';
+import { resolveAed, resolveInr, formatCurrency, getCurrentMonthKey, getMonthKey, getMonthLabel, computeMonthlyStats, getMonthSalaryRate, CATEGORY_COLORS } from '../utils';
+import { useSalaryRateMap } from '../hooks';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -43,7 +44,7 @@ export default function Dashboard() {
   // conversion rate (see buildSalaryRateMap) instead of each transaction's
   // own frozen/live rate — so "balance after expenses" reflects real
   // converted rupees, not a rate that drifted day to day within the month.
-  const salaryRateMap = useMemo(() => buildSalaryRateMap(incomes, aedToInrRate), [incomes, aedToInrRate]);
+  const salaryRateMap = useSalaryRateMap(incomes, aedToInrRate);
   const currentMonthRate = getMonthSalaryRate(currentMonth, salaryRateMap, aedToInrRate);
 
   const monthExpenses = useMemo(() =>

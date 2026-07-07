@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { Palmtree, Calendar, TrendingUp, PiggyBank, Gem, Heart, LineChart } from 'lucide-react';
 import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useInvestmentTransactions, useSettings } from '../stores/useAppStore';
 import { PageHeader, StatCard } from '../components/ui';
-import { resolveAed, formatCurrency, computePortfolioStats, EXPENSE_CATEGORIES, getMonthKey, buildSalaryRateMap, getMonthSalaryRate } from '../utils';
+import { resolveAed, formatCurrency, computePortfolioStats, EXPENSE_CATEGORIES, getMonthKey, getMonthSalaryRate } from '../utils';
+import { useSalaryRateMap } from '../hooks';
 
 export default function DubaiLife() {
   const expenses = useExpenses();
@@ -16,7 +17,7 @@ export default function DubaiLife() {
   // Every AED figure is valued at that transaction's month's salary
   // conversion rate (see buildSalaryRateMap in utils), matching
   // Dashboard/Expenses/Analytics so "total savings" is consistent app-wide.
-  const salaryRateMap = useMemo(() => buildSalaryRateMap(incomes, aedToInrRate), [incomes, aedToInrRate]);
+  const salaryRateMap = useSalaryRateMap(incomes, aedToInrRate);
 
   const daysInDubai = useMemo(() => {
     if (!dubaiArrivalDate) return 0;

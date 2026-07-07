@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import Layout from './components/layout/Layout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import Auth from './pages/Auth';
 import { useAppStore, useSettings } from './stores/useAppStore';
 import { useAuthStore } from './stores/useAuthStore';
@@ -83,7 +84,9 @@ function AppContent() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppContent />
+      <ErrorBoundary>
+        <AppContent />
+      </ErrorBoundary>
       <VercelAnalytics />
       <SpeedInsights />
     </BrowserRouter>
