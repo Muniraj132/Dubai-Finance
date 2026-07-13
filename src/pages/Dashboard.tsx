@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { TrendingUp, TrendingDown, PiggyBank, Percent, ArrowRightLeft, AlertTriangle, Landmark } from 'lucide-react';
 import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useSettings } from '../stores/useAppStore';
-import { StatCard } from '../components/ui';
+import { StatCard, Select } from '../components/ui';
 import { resolveAed, resolveInr, formatCurrency, getCurrentMonthKey, getMonthKey, getMonthLabel, computeMonthlyStats, getMonthSalaryRate, CATEGORY_COLORS } from '../utils';
 import { useSalaryRateMap } from '../hooks';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
@@ -40,35 +40,66 @@ export default function Dashboard() {
 
   const currentMonth = getCurrentMonthKey();
 
+  // Month filter — 'all' aggregates every transaction, otherwise scoped to one month key (YYYY-MM)
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth);
+  const isAllTime = selectedMonth === 'all';
+
+  const availableMonths = useMemo(() => {
+    const set = new Set<string>([currentMonth]);
+    expenses.forEach(e => set.add(getMonthKey(e.date)));
+    incomes.forEach(i => set.add(getMonthKey(i.date)));
+    return Array.from(set).sort().reverse();
+  }, [expenses, incomes, currentMonth]);
+
   // Every AED figure for a given month is valued at that month's salary
   // conversion rate (see buildSalaryRateMap) instead of each transaction's
   // own frozen/live rate — so "balance after expenses" reflects real
   // converted rupees, not a rate that drifted day to day within the month.
   const salaryRateMap = useSalaryRateMap(incomes, aedToInrRate);
-  const currentMonthRate = getMonthSalaryRate(currentMonth, salaryRateMap, aedToInrRate);
+  const selectedMonthRate = isAllTime ? aedToInrRate : getMonthSalaryRate(selectedMonth, salaryRateMap, aedToInrRate);
 
-  const monthExpenses = useMemo(() =>
-    expenses.filter(e => getMonthKey(e.date) === currentMonth)
-      .reduce((sum, e) => sum + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
-    [expenses, currentMonth, aedToInrRate]
+  const filteredExpenses = useMemo(() =>
+    isAllTime ? expenses : expenses.filter(e => getMonthKey(e.date) === selectedMonth),
+    [expenses, isAllTime, selectedMonth]
   );
-  const monthExpensesInr = useMemo(() => monthExpenses * currentMonthRate, [monthExpenses, currentMonthRate]);
-
-  const monthIncome = useMemo(() =>
-    incomes.filter(i => getMonthKey(i.date) === currentMonth)
-      .reduce((sum, i) => sum + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
-    [incomes, currentMonth, aedToInrRate]
+  const filteredIncomes = useMemo(() =>
+    isAllTime ? incomes : incomes.filter(i => getMonthKey(i.date) === selectedMonth),
+    [incomes, isAllTime, selectedMonth]
   );
-  const monthIncomeInr = useMemo(() => monthIncome * currentMonthRate, [monthIncome, currentMonthRate]);
 
-  const monthSavings = monthIncome - monthExpenses;
-  const monthSavingsInr = monthIncomeInr - monthExpensesInr;
-  const savingsRate = monthIncome > 0 ? (monthSavings / monthIncome) * 100 : 0;
+  const periodExpenses = useMemo(() =>
+    filteredExpenses.reduce((sum, e) => sum + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
+    [filteredExpenses, aedToInrRate]
+  );
+  const periodExpensesInr = useMemo(() =>
+    filteredExpenses.reduce((sum, e) => {
+      const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+      return sum + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
+    }, 0),
+    [filteredExpenses, salaryRateMap, aedToInrRate]
+  );
+
+  const periodIncome = useMemo(() =>
+    filteredIncomes.reduce((sum, i) => sum + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
+    [filteredIncomes, aedToInrRate]
+  );
+  const periodIncomeInr = useMemo(() =>
+    filteredIncomes.reduce((sum, i) => {
+      const aed = resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate);
+      return sum + aed * getMonthSalaryRate(getMonthKey(i.date), salaryRateMap, aedToInrRate);
+    }, 0),
+    [filteredIncomes, salaryRateMap, aedToInrRate]
+  );
+
+  const periodSavings = periodIncome - periodExpenses;
+  const periodSavingsInr = periodIncomeInr - periodExpensesInr;
+  const savingsRate = periodIncome > 0 ? (periodSavings / periodIncome) * 100 : 0;
 
   // Spending warnings
-  const spendingRatio = monthIncome > 0 ? monthExpenses / monthIncome : 0;
-  const showOverBudget = monthIncome > 0 && spendingRatio >= 1;
-  const showHighSpending = monthIncome > 0 && spendingRatio >= 0.8 && spendingRatio < 1;
+  const spendingRatio = periodIncome > 0 ? periodExpenses / periodIncome : 0;
+  const showOverBudget = periodIncome > 0 && spendingRatio >= 1;
+  const showHighSpending = periodIncome > 0 && spendingRatio >= 0.8 && spendingRatio < 1;
+  const periodLabel = isAllTime ? 'this period' : 'this month';
 
   const monthlyStats = useMemo(() =>
     computeMonthlyStats(expenses, incomes, aedToInrRate).slice(-6),
@@ -112,22 +143,27 @@ export default function Dashboard() {
 
   const categoryData = useMemo(() => {
     const map = new Map<string, { value: number; valueInr: number }>();
-    expenses
-      .filter(e => getMonthKey(e.date) === currentMonth)
-      .forEach(e => {
-        const amt = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
-        const prev = map.get(e.category) ?? { value: 0, valueInr: 0 };
-        map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amt * currentMonthRate });
-      });
+    filteredExpenses.forEach(e => {
+      const amt = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+      const rate = getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
+      const prev = map.get(e.category) ?? { value: 0, valueInr: 0 };
+      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amt * rate });
+    });
     return Array.from(map.entries()).map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
       .sort((a, b) => b.value - a.value);
-  }, [expenses, currentMonth, aedToInrRate, currentMonthRate]);
+  }, [filteredExpenses, salaryRateMap, aedToInrRate]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-primary tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted mt-1">{getMonthLabel(currentMonth)} Overview</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-primary tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted mt-1">{isAllTime ? 'All Time' : getMonthLabel(selectedMonth)} Overview</p>
+        </div>
+        <Select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} className="w-40">
+          <option value="all">All Time</option>
+          {availableMonths.map(m => <option key={m} value={m}>{getMonthLabel(m)}</option>)}
+        </Select>
       </div>
 
       {/* Spending warnings */}
@@ -135,9 +171,9 @@ export default function Dashboard() {
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30">
           <AlertTriangle size={16} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
           <div>
-            <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income this month!</div>
+            <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income {periodLabel}!</div>
             <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
-              Spent AED {monthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{monthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {monthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
+              Spent AED {periodExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{periodExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {periodIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
             </div>
           </div>
         </div>
@@ -148,7 +184,7 @@ export default function Dashboard() {
           <div>
             <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
             <div className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
-              AED {monthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{monthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(monthIncome - monthExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} remaining this month.
+              AED {periodExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{periodExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(periodIncome - periodExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} remaining {periodLabel}.
             </div>
           </div>
         </div>
@@ -158,22 +194,22 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Income"
-          value={`AED ${monthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(monthIncomeInr, 'INR')}`}
+          value={`AED ${periodIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(periodIncomeInr, 'INR')}`}
           icon={<TrendingUp size={16} />}
           color="green"
         />
         <StatCard
           title="Total Expenses"
-          value={`AED ${monthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(monthExpensesInr, 'INR')}`}
+          value={`AED ${periodExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(periodExpensesInr, 'INR')}`}
           icon={<TrendingDown size={16} />}
           color="red"
         />
         <StatCard
           title="Savings"
-          value={`AED ${monthSavings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(monthSavingsInr, 'INR')}`}
+          value={`AED ${periodSavings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(periodSavingsInr, 'INR')}`}
           icon={<PiggyBank size={16} />}
           color="cyan"
         />
@@ -201,8 +237,8 @@ export default function Dashboard() {
       <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-[#6366F1]/10 to-[#818CF8]/10 border border-[#6366F1]/20">
         <ArrowRightLeft size={16} className="text-[#6366F1] shrink-0" />
         <span className="text-sm text-[#818CF8]">
-          <span className="font-semibold">{salaryRateMap.has(currentMonth) ? "This Month's Salary Rate:" : 'Live Rate:'}</span> 1 AED = ₹{currentMonthRate.toFixed(2)} INR &nbsp;·&nbsp;
-          AED {monthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })} = ₹{(monthIncome * currentMonthRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+          <span className="font-semibold">{!isAllTime && salaryRateMap.has(selectedMonth) ? "This Month's Salary Rate:" : 'Live Rate:'}</span> 1 AED = ₹{selectedMonthRate.toFixed(2)} INR &nbsp;·&nbsp;
+          AED {periodIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })} = ₹{periodIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
         </span>
       </div>
 
@@ -273,11 +309,13 @@ export default function Dashboard() {
       {/* Recent Expenses */}
       <div className="card">
         <h2 className="text-sm font-semibold text-primary mb-4">Recent Expenses</h2>
-        {expenses.length === 0 ? (
-          <div className="text-center py-8 text-muted text-sm">No expenses yet. Start tracking your spending!</div>
+        {filteredExpenses.length === 0 ? (
+          <div className="text-center py-8 text-muted text-sm">
+            {isAllTime ? 'No expenses yet. Start tracking your spending!' : 'No expenses for this month.'}
+          </div>
         ) : (
           <div className="space-y-2">
-            {expenses.slice(0, 5).map(exp => {
+            {filteredExpenses.slice(0, 5).map(exp => {
               const expMonthRate = getMonthSalaryRate(getMonthKey(exp.date), salaryRateMap, aedToInrRate);
               const inAED = exp.currency === 'AED' ? exp.amount : exp.amount / expMonthRate;
               const inINR = exp.currency === 'AED' ? exp.amount * expMonthRate : exp.amount;
