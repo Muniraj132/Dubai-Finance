@@ -491,7 +491,7 @@ matches today and inserts a SIP transaction for each:
   and how to test the function directly (`select run_sip_investments();`)
   without waiting for the schedule to fire.
 
-### 7.11 The financial model: Income, Living Expenses, Investments, Liabilities
+### 7.11 The financial model: Income, Living Expenses, Investments, Chit Funds, Liabilities
 
 **The core rule: investing is converting cash into a different asset, not
 spending it.** Money that leaves the bank account to buy stocks, mutual
@@ -524,21 +524,27 @@ Functions in `utils/index.ts` are the single source of truth for this model
 Worth should compute through them rather than re-deriving totals inline:
 
 - **`computeFinancialSummary({ income, incomeInr, livingExpenses,
-  livingExpensesInr, investments, investmentsInr, debtPrincipalPaid?,
-  debtPrincipalPaidInr?, debtInterest?, debtInterestInr? })`** — for a given
-  period (a month, or all-time), returns `{ livingExpenses, investments,
+  livingExpensesInr, investments, investmentsInr, chitContributions?,
+  chitContributionsInr?, debtPrincipalPaid?, debtPrincipalPaidInr?,
+  debtInterest?, debtInterestInr? })`** — for a given period (a month, or
+  all-time), returns `{ livingExpenses, investments, chitContributions,
   debtPrincipalPaid, debtInterest, cashRemaining, totalSaved, savingsRate }`
   where:
-  - `cashRemaining = income - livingExpenses - investments - debtInterest -
-    debtPrincipalPaid`
-  - `totalSaved = investments + debtPrincipalPaid + cashRemaining` (this
-    always equals `income - livingExpenses - debtInterest`, algebraically —
-    it's computed via its components anyway so the breakdown stays visible)
+  - `cashRemaining = income - livingExpenses - investments -
+    chitContributions - debtInterest - debtPrincipalPaid`
+  - `totalSaved = investments + chitContributions + debtPrincipalPaid +
+    cashRemaining` (this always equals `income - livingExpenses -
+    debtInterest`, algebraically — it's computed via its components anyway
+    so the breakdown stays visible)
   - `savingsRate = totalSaved / income × 100`
   - `investments` for a period comes from `computeInvestmentCashFlow`
     (Buy/SIP pull cash out, Sell/Dividend put cash back in) plus
     `computeGoldCashFlow` (gold has no live price feed, so its cost basis
     doubles as its current value) — never from the `expenses` table.
+  - `chitContributions` for a period comes from `computeChitCashFlow` over
+    that period's `chit_installments` (summed by `paid_date`) — a chit
+    contribution is a pooled forced-savings payment, not spending, so it's
+    excluded from `livingExpenses` the same way an investment is.
   - `debtPrincipalPaid`/`debtInterest` for a period come from
     `computeDebtCashFlow` over that period's `liability_transactions` —
     `Charge` rows are excluded (no cash moves on a charge; it just increases
@@ -549,20 +555,47 @@ Worth should compute through them rather than re-deriving totals inline:
   liabilitiesOutstanding, ... })`** — `cash = allTimeIncome -
   allTimeLivingExpenses - investedCash - debtPrincipalPaid -
   debtInterestPaid` (cash on hand net of every dirham/rupee ever pulled out
-  for investments/gold *or* to pay down a debt, principal and interest
-  both), then `netWorth = cash + investmentsValue - liabilitiesOutstanding`.
-  `investmentsValue` is current mark-to-market (investments' `currentValue`
-  + gold's cost basis); `investedCash` is the all-time cost basis pulled out
-  of cash for both; `liabilitiesOutstanding` comes from
-  `computePortfolioLiabilityStats` (below).
+  for investments/gold/chit contributions *or* to pay down a debt, principal
+  and interest both), then `netWorth = cash + investmentsValue -
+  liabilitiesOutstanding`. `investmentsValue` is current mark-to-market
+  (investments' `currentValue` + gold's cost basis); `investedCash` is the
+  all-time cost basis pulled out of cash for both; `liabilitiesOutstanding`
+  comes from `computePortfolioLiabilityStats` (below). Chit funds fold into
+  this same `investedCash`/`investmentsValue` pair rather than getting their
+  own parameters — see below for why that's exactly right, not a shortcut.
 
 `Dashboard.tsx` is the primary consumer: its stat grid shows Income, Living
-Expenses, Investments, Cash Remaining, Debt Paid Down, Total Saved, Savings
-Rate, and Net Worth, all period-scoped (except Net Worth, always all-time)
-via the month selector. `DubaiLife.tsx`'s "Total Saved" stat uses the same
-underlying math (pre-existing — its `totalEarnings - totalExpenses` was
-already numerically equal to `totalSaved`, just mislabeled "Total Savings";
-it doesn't yet account for debt, since that page predates Liabilities).
+Expenses, Investments, Cash Remaining, Chit Contributions, Debt Paid Down,
+Total Saved, Savings Rate, and Net Worth, all period-scoped (except Net
+Worth, always all-time) via the month selector. `DubaiLife.tsx`'s "Total
+Saved" stat uses the same underlying math (pre-existing — its
+`totalEarnings - totalExpenses` was already numerically equal to
+`totalSaved`, just mislabeled "Total Savings"; it doesn't yet account for
+debt or chit funds, since that page predates both).
+
+**Chit funds** (§7.6) are a pooled forced-savings scheme from the user's
+perspective — money paid in isn't spent, it's converted into a claim on a
+future (or already-received) lump-sum payout. `computeChitCashFlow`
+(period-scoped, sums `chit_installments.paid_amount` by `paid_date`) feeds
+the period breakdown exactly like an investment contribution. For Net
+Worth, `computeChitNetValue` computes one all-time figure per chit — total
+paid in, minus any `received_amount` already paid out — and that single
+number does double duty: it's *both* the cash that left the bank (folded
+into `investedCash`) *and* the current value of what you're owed (folded
+into `investmentsValue`), the same way gold's cost basis doubles as its
+value, since chit funds have no separate market value in this app either.
+This can go negative once a payout is received early (you've been paid more
+than you've contributed so far) — correctly acting like debt for the
+installments still owed, without needing a separate liability entry.
+Because these two foldings are identical in magnitude, chit funds
+mathematically have **zero net effect on the Net Worth total** as long as
+no gain/loss is ever modeled for them (it isn't) — the value only shows up
+in the period breakdown (Chit Contributions, Cash Remaining, Total Saved),
+not in whether the all-time Net Worth number moves. A known gap: a payout's
+exact receipt date isn't tracked (`chit_funds.received_month_no` is an
+installment index, not a calendar date), so `computeChitNetValue` is
+all-time only — a payout received mid-year won't show up as a cash windfall
+in that month's Cash Remaining.
 
 **Liabilities** (`liabilities` + `liability_transactions` tables,
 `/liabilities` page) follow the exact same parent (holding) + child (ledger)

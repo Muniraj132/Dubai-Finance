@@ -245,9 +245,10 @@ export interface LiabilityStats {
 }
 
 // Breakdown of where a period's income actually went: living expenses,
-// investments (converted, not spent), debt paid down (also converted, not
-// spent), debt interest (a genuine cost), and cash left over. See
-// docs/ARCHITECTURE.md §7.11 for the full model.
+// investments (converted, not spent), chit fund contributions (also
+// converted, not spent — a pooled forced-savings scheme), debt paid down
+// (also converted, not spent), debt interest (a genuine cost), and cash
+// left over. See docs/ARCHITECTURE.md §7.11 for the full model.
 export interface FinancialSummary {
   income: number;
   incomeInr: number;
@@ -255,6 +256,8 @@ export interface FinancialSummary {
   livingExpensesInr: number;
   investments: number;
   investmentsInr: number;
+  chitContributions: number;
+  chitContributionsInr: number;
   debtPrincipalPaid: number;
   debtPrincipalPaidInr: number;
   debtInterest: number;

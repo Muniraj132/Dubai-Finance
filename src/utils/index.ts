@@ -1,4 +1,4 @@
-import { Expense, Income, MonthlyStats, Investment, InvestmentTransaction, GoldPurchase, Liability, LiabilityTransaction, LiabilityStats, AppSettings, FinancialSummary } from '../types';
+import { Expense, Income, MonthlyStats, Investment, InvestmentTransaction, GoldPurchase, Liability, LiabilityTransaction, LiabilityStats, ChitFund, ChitInstallment, AppSettings, FinancialSummary } from '../types';
 
 export const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -146,37 +146,82 @@ export const computeGoldCashFlow = (
   return { aed, inr };
 };
 
+// Cash paid into a chit fund pool this period — a forced-savings scheme,
+// not spending (see docs/ARCHITECTURE.md §7.6/§7.11). Chit amounts are
+// always INR-native in this app (chit_funds/chit_installments have no
+// currency column), so there's no resolveAed snapshot to read — just a
+// live conversion at the given rate, same as any other INR-native figure.
+export const computeChitCashFlow = (
+  installments: ChitInstallment[],
+  rate: number,
+  salaryRateMap: Map<string, number>
+): { aed: number; inr: number } => {
+  let aed = 0, inr = 0;
+  installments.forEach(i => {
+    const paid = i.paid_amount ?? 0;
+    if (!paid) return;
+    const a = convertToAED(paid, 'INR', rate);
+    aed += a;
+    inr += a * getMonthSalaryRate(getMonthKey(i.paid_date), salaryRateMap, rate);
+  });
+  return { aed, inr };
+};
+
+// All-time net value tied up across every chit fund: what you've paid in,
+// minus any lump-sum payout(s) already received. Chit funds have no
+// separate market value in this app (no gain/loss modeled), so this net
+// figure does double duty in Net Worth — it's both the cash that left the
+// bank (to subtract) and the current value of what you're owed (to add
+// back), the same way gold's cost basis doubles as its value. Can go
+// negative after receiving a payout early, correctly acting like debt for
+// the remaining installments still owed.
+export const computeChitNetValue = (
+  chitFunds: ChitFund[],
+  installments: ChitInstallment[],
+  rate: number
+): { aed: number; inr: number } => {
+  const totalPaid = installments.reduce((s, i) => s + (i.paid_amount ?? 0), 0);
+  const totalReceived = chitFunds.reduce((s, c) => s + (c.received_amount ?? 0), 0);
+  const netInr = totalPaid - totalReceived;
+  return { aed: convertToAED(netInr, 'INR', rate), inr: netInr };
+};
+
 // The core "where did this period's income go" breakdown. `investments` is
 // cash converted into investment assets (from computeInvestmentCashFlow +
-// computeGoldCashFlow); `debtPrincipalPaid` is cash converted into reduced
-// debt (from computeDebtCashFlow) — both are "saved," not spent, so neither
-// is part of `livingExpenses`. `debtInterest` is a genuine cost of
-// borrowing, so it does reduce Cash Remaining, same as a living expense
-// would. Total Saved = Investments + Debt Principal Paid + Cash Remaining,
-// which algebraically always equals Income − Living Expenses − Debt
-// Interest; it's computed via its components anyway so the breakdown stays
-// visible and consistent.
+// computeGoldCashFlow); `chitContributions` is cash paid into a chit fund
+// pool (from computeChitCashFlow); `debtPrincipalPaid` is cash converted
+// into reduced debt (from computeDebtCashFlow) — all three are "saved," not
+// spent, so none of them is part of `livingExpenses`. `debtInterest` is a
+// genuine cost of borrowing, so it does reduce Cash Remaining, same as a
+// living expense would. Total Saved = Investments + Chit Contributions +
+// Debt Principal Paid + Cash Remaining, which algebraically always equals
+// Income − Living Expenses − Debt Interest; it's computed via its
+// components anyway so the breakdown stays visible and consistent.
 export const computeFinancialSummary = (opts: {
   income: number; incomeInr: number;
   livingExpenses: number; livingExpensesInr: number;
   investments: number; investmentsInr: number;
+  chitContributions?: number; chitContributionsInr?: number;
   debtPrincipalPaid?: number; debtPrincipalPaidInr?: number;
   debtInterest?: number; debtInterestInr?: number;
 }): FinancialSummary => {
   const { income, incomeInr, livingExpenses, livingExpensesInr, investments, investmentsInr } = opts;
+  const chitContributions = opts.chitContributions ?? 0;
+  const chitContributionsInr = opts.chitContributionsInr ?? 0;
   const debtPrincipalPaid = opts.debtPrincipalPaid ?? 0;
   const debtPrincipalPaidInr = opts.debtPrincipalPaidInr ?? 0;
   const debtInterest = opts.debtInterest ?? 0;
   const debtInterestInr = opts.debtInterestInr ?? 0;
 
-  const cashRemaining = income - livingExpenses - investments - debtInterest - debtPrincipalPaid;
-  const cashRemainingInr = incomeInr - livingExpensesInr - investmentsInr - debtInterestInr - debtPrincipalPaidInr;
-  const totalSaved = investments + debtPrincipalPaid + cashRemaining;
-  const totalSavedInr = investmentsInr + debtPrincipalPaidInr + cashRemainingInr;
+  const cashRemaining = income - livingExpenses - investments - chitContributions - debtInterest - debtPrincipalPaid;
+  const cashRemainingInr = incomeInr - livingExpensesInr - investmentsInr - chitContributionsInr - debtInterestInr - debtPrincipalPaidInr;
+  const totalSaved = investments + chitContributions + debtPrincipalPaid + cashRemaining;
+  const totalSavedInr = investmentsInr + chitContributionsInr + debtPrincipalPaidInr + cashRemainingInr;
   const savingsRate = income > 0 ? (totalSaved / income) * 100 : 0;
   return {
     income, incomeInr, livingExpenses, livingExpensesInr,
-    investments, investmentsInr, debtPrincipalPaid, debtPrincipalPaidInr,
+    investments, investmentsInr, chitContributions, chitContributionsInr,
+    debtPrincipalPaid, debtPrincipalPaidInr,
     debtInterest, debtInterestInr, cashRemaining, cashRemainingInr,
     totalSaved, totalSavedInr, savingsRate,
   };

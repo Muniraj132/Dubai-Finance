@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { TrendingUp, TrendingDown, PiggyBank, Percent, ArrowRightLeft, AlertTriangle, Landmark, LineChart, Wallet, HandCoins } from 'lucide-react';
-import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useInvestmentTransactions, useLiabilities, useLiabilityTransactions, useSettings } from '../stores/useAppStore';
+import { TrendingUp, TrendingDown, PiggyBank, Percent, ArrowRightLeft, AlertTriangle, Landmark, LineChart, Wallet, HandCoins, IndianRupee } from 'lucide-react';
+import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useInvestmentTransactions, useLiabilities, useLiabilityTransactions, useChitFunds, useChitInstallments, useSettings } from '../stores/useAppStore';
 import { StatCard, Select } from '../components/ui';
 import {
   resolveAed, resolveInr, formatCurrency, getCurrentMonthKey, getMonthKey, getMonthLabel, computeMonthlyStats, getMonthSalaryRate, CATEGORY_COLORS,
-  computeInvestmentCashFlow, computeGoldCashFlow, computeDebtCashFlow, computeFinancialSummary, computeNetWorth, computePortfolioLiabilityStats,
+  computeInvestmentCashFlow, computeGoldCashFlow, computeDebtCashFlow, computeChitCashFlow, computeChitNetValue, computeFinancialSummary, computeNetWorth, computePortfolioLiabilityStats,
 } from '../utils';
 import { useSalaryRateMap } from '../hooks';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
@@ -41,6 +41,8 @@ export default function Dashboard() {
   const investmentTransactions = useInvestmentTransactions();
   const liabilities = useLiabilities();
   const liabilityTransactions = useLiabilityTransactions();
+  const chitFunds = useChitFunds();
+  const chitInstallments = useChitInstallments();
   const settings = useSettings();
   const { aedToInrRate } = settings;
 
@@ -57,8 +59,9 @@ export default function Dashboard() {
     investmentTransactions.forEach(t => set.add(getMonthKey(t.date)));
     goldPurchases.forEach(g => set.add(getMonthKey(g.date)));
     liabilityTransactions.forEach(t => set.add(getMonthKey(t.date)));
+    chitInstallments.forEach(i => { if (i.paid_amount) set.add(getMonthKey(i.paid_date)); });
     return Array.from(set).sort().reverse();
-  }, [expenses, incomes, investmentTransactions, goldPurchases, liabilityTransactions, currentMonth]);
+  }, [expenses, incomes, investmentTransactions, goldPurchases, liabilityTransactions, chitInstallments, currentMonth]);
 
   // Every AED figure for a given month is valued at that month's salary
   // conversion rate (see buildSalaryRateMap) instead of each transaction's
@@ -86,6 +89,10 @@ export default function Dashboard() {
   const filteredLiabilityTxns = useMemo(() =>
     isAllTime ? liabilityTransactions : liabilityTransactions.filter(t => getMonthKey(t.date) === selectedMonth),
     [liabilityTransactions, isAllTime, selectedMonth]
+  );
+  const filteredChitInstallments = useMemo(() =>
+    isAllTime ? chitInstallments : chitInstallments.filter(i => getMonthKey(i.paid_date) === selectedMonth),
+    [chitInstallments, isAllTime, selectedMonth]
   );
 
   const periodExpenses = useMemo(() =>
@@ -133,13 +140,21 @@ export default function Dashboard() {
     [filteredLiabilityTxns, aedToInrRate, salaryRateMap]
   );
 
+  // Chit fund contributions — a pooled forced-savings scheme, not a living
+  // expense (see computeChitCashFlow / docs/ARCHITECTURE.md §7.11).
+  const periodChitCash = useMemo(() =>
+    computeChitCashFlow(filteredChitInstallments, aedToInrRate, salaryRateMap),
+    [filteredChitInstallments, aedToInrRate, salaryRateMap]
+  );
+
   const summary = useMemo(() => computeFinancialSummary({
     income: periodIncome, incomeInr: periodIncomeInr,
     livingExpenses: periodExpenses, livingExpensesInr: periodExpensesInr,
     investments: periodInvestments, investmentsInr: periodInvestmentsInr,
+    chitContributions: periodChitCash.aed, chitContributionsInr: periodChitCash.inr,
     debtPrincipalPaid: periodDebtCash.principalAed, debtPrincipalPaidInr: periodDebtCash.principalInr,
     debtInterest: periodDebtCash.interestAed, debtInterestInr: periodDebtCash.interestInr,
-  }), [periodIncome, periodIncomeInr, periodExpenses, periodExpensesInr, periodInvestments, periodInvestmentsInr, periodDebtCash]);
+  }), [periodIncome, periodIncomeInr, periodExpenses, periodExpensesInr, periodInvestments, periodInvestmentsInr, periodChitCash, periodDebtCash]);
 
   // Spending warnings — based on living expenses vs. income only; investing
   // heavily isn't overspending, it's saving in a different form.
@@ -177,19 +192,24 @@ export default function Dashboard() {
     // Gold has no live price feed — cost basis doubles as current value.
     const allTimeDebtCash = computeDebtCashFlow(liabilityTransactions, aedToInrRate, salaryRateMap);
     const liabilityStats = computePortfolioLiabilityStats(liabilities, liabilityTransactions, aedToInrRate);
+    // Chit funds have no separate market value either — net contributed
+    // (paid minus any lump-sum already received) doubles as their value,
+    // same reasoning as gold. Folded into the same investedCash/
+    // investmentsValue pair so it nets out correctly (see computeChitNetValue).
+    const chitNetValue = computeChitNetValue(chitFunds, chitInstallments, aedToInrRate);
 
     return computeNetWorth({
       allTimeIncome, allTimeIncomeInr,
       allTimeLivingExpenses: allTimeExpenses, allTimeLivingExpensesInr: allTimeExpensesInr,
-      investedCash: allTimeInvestmentCash.aed + allTimeGoldCash.aed,
-      investedCashInr: allTimeInvestmentCash.inr + allTimeGoldCash.inr,
-      investmentsValue: investmentsValue + allTimeGoldCash.aed,
-      investmentsValueInr: investmentsValueInr + allTimeGoldCash.inr,
+      investedCash: allTimeInvestmentCash.aed + allTimeGoldCash.aed + chitNetValue.aed,
+      investedCashInr: allTimeInvestmentCash.inr + allTimeGoldCash.inr + chitNetValue.inr,
+      investmentsValue: investmentsValue + allTimeGoldCash.aed + chitNetValue.aed,
+      investmentsValueInr: investmentsValueInr + allTimeGoldCash.inr + chitNetValue.inr,
       debtPrincipalPaid: allTimeDebtCash.principalAed, debtPrincipalPaidInr: allTimeDebtCash.principalInr,
       debtInterestPaid: allTimeDebtCash.interestAed, debtInterestPaidInr: allTimeDebtCash.interestInr,
       liabilitiesOutstanding: liabilityStats.outstandingAed, liabilitiesOutstandingInr: liabilityStats.outstandingInr,
     });
-  }, [incomes, expenses, goldPurchases, investments, investmentTransactions, liabilities, liabilityTransactions, aedToInrRate, salaryRateMap]);
+  }, [incomes, expenses, goldPurchases, investments, investmentTransactions, liabilities, liabilityTransactions, chitFunds, chitInstallments, aedToInrRate, salaryRateMap]);
 
   const chartData = monthlyStats.map(s => ({
     month: getMonthLabel(s.month),
@@ -282,8 +302,15 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Debt Paid Down, Total Saved, Savings Rate, Net Worth */}
+      {/* Chit Contributions, Debt Paid Down, Total Saved, Savings Rate */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Chit Contributions"
+          value={`AED ${summary.chitContributions.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(summary.chitContributionsInr, 'INR')} · pooled savings`}
+          icon={<IndianRupee size={16} />}
+          color="purple"
+        />
         <StatCard
           title="Debt Paid Down"
           value={`AED ${summary.debtPrincipalPaid.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
@@ -294,7 +321,7 @@ export default function Dashboard() {
         <StatCard
           title="Total Saved"
           value={`AED ${summary.totalSaved.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(summary.totalSavedInr, 'INR')} · investments + debt paid + cash`}
+          sub={`≈ ${formatCurrency(summary.totalSavedInr, 'INR')} · investments + chits + debt paid + cash`}
           icon={<PiggyBank size={16} />}
           color="cyan"
         />
@@ -305,10 +332,14 @@ export default function Dashboard() {
           icon={<Percent size={16} />}
           color="theme"
         />
+      </div>
+
+      {/* Net Worth */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatCard
           title="Net Worth"
           value={`AED ${netWorth.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(netWorthInr, 'INR')} · cash + investments + gold − liabilities`}
+          sub={`≈ ${formatCurrency(netWorthInr, 'INR')} · cash + investments + gold + chits − liabilities`}
           icon={<Landmark size={16} />}
           color="blue"
         />
