@@ -126,9 +126,9 @@ export default function DubaiLife() {
           color="green"
         />
         <StatCard
-          title="Total Savings"
+          title="Total Saved"
           value={`AED ${totalSavings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`${savingsRate.toFixed(1)}% savings rate`}
+          sub={`${savingsRate.toFixed(1)}% savings rate · investments + cash`}
           icon={<PiggyBank size={16} />}
           color="cyan"
         />

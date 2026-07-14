@@ -83,6 +83,7 @@ bundles are fetched on demand instead of one large bundle. `Layout` and
 | `/goals` | `Goals.tsx` | Savings goals with progress bars and a "contribute funds" flow |
 | `/gold` | `GoldTracker.tsx` | Gold purchases (grams + price/gram), progress toward a target weight |
 | `/investments` | `Investments.tsx` | Investment holdings (list + detail, like Chit Funds) and their Buy/SIP/Sell/Dividend transaction ledger |
+| `/liabilities` | `Liabilities.tsx` | Loans, credit cards, and other debts — list + detail (like Investments) with a Charge/Payment ledger, subtracted from Net Worth |
 | `/analytics` | `Analytics.tsx` | Deeper charts: today's summary, best/worst months, all-time category breakdown, portfolio allocation |
 | `/budget` | `BudgetPlanner.tsx` | Per-category monthly budgets vs. actual spend, with over/near/on-track status |
 | `/converter` | `Converter.tsx` | Standalone AED⇄INR calculator + salary reference table (not tied to stored records) |
@@ -110,11 +111,11 @@ same browser would briefly see the previous user's cached state).
 
 Holds every domain collection (`expenses`, `incomes`, `goals`, `budgets`,
 `goldPurchases`, `chitFunds`, `chitInstallments`, `investments`,
-`investmentTransactions`, `settings`) plus `isLoading`, `rateJustUpdated`,
-and `lastError`.
+`investmentTransactions`, `liabilities`, `settings`) plus `isLoading`,
+`rateJustUpdated`, and `lastError`.
 
 **Boot sequence**: `initialize()` (called once in `App.tsx` when `user`
-becomes truthy) fires all 10 Supabase `select` queries in parallel via
+becomes truthy) fires all 11 Supabase `select` queries in parallel via
 `Promise.all` and populates the store. There is no pagination/streaming —
 the entire dataset for the signed-in user is loaded into memory up front.
 This is fine at personal-finance-tracker scale but wouldn't scale to a
@@ -172,6 +173,8 @@ files:
 - `0004_investments.sql` — adds `investments` + `investment_transactions` (§7.10).
 - `0005_investment_scheme_code.sql` — adds `investments."schemeCode"` for live Mutual Fund NAV refresh (§7.10).
 - `0006_investment_sip.sql` — adds SIP columns + a `pg_cron` job that auto-generates monthly SIP transactions (§7.10).
+- `0007_liabilities.sql` — adds `liabilities` (loans, credit cards, other debts), so Net Worth can subtract what you owe (§7.11).
+- `0008_liability_transactions.sql` — adds `liabilities."status"` and `liability_transactions` (a Charge/Payment ledger), so outstanding balance/principal paid/interest paid are derived instead of one manually-edited number (§7.11).
 
 ### Tables
 
@@ -191,6 +194,8 @@ for `all` operations — i.e., a user can only ever see/modify their own rows.
 | `chit_installments` | `chit_id (FK), month_no, due_date, amount, paid_amount, paid_date, payment_mode, status, remark` | Indexed on `chit_id`; deleting a chit fund cascades to its installments (`on delete cascade`, also mirrored in the optimistic client-side delete) |
 | `investments` | `type, name, currency, currentValue, maturityDate, interestRate, schemeCode, sipEnabled, sipAmount, sipDay, sipLastRunDate, status, notes` + `currentValueAed/Inr, exchangeRateUsed` | `currentValue` is normally a manually-updated mark-to-market figure, *except* for Mutual Funds linked to an AMFI `schemeCode`, which can refresh it live (see §7.10); `maturityDate`/`interestRate` are only meaningful for Fixed Deposit/PPF/NPS; `sip*` columns drive the recurring-SIP cron job (see §7.10) — `sipLastRunDate` is server-maintained, never written by the client except as `null` on create |
 | `investment_transactions` | `investment_id (FK), type, date, units, pricePerUnit, amount, currency, notes` + `amountAed/Inr, exchangeRateUsed` | Indexed on `investment_id`; deleting an investment cascades to its transactions, same pattern as chit installments. `units`/`pricePerUnit` are null for Dividend and for Fixed Deposit/PPF/NPS transactions |
+| `liabilities` | `type, name, currency, balance, status, notes, createdAt` + `balanceAed/Inr, exchangeRateUsed` | `balance` is the *opening* balance when the debt was first added, not a running total — current outstanding amount is derived from `balance` + its `liability_transactions` ledger (§7.11), same parent+child shape as `investments`/`investment_transactions` |
+| `liability_transactions` | `liability_id (FK), type, date, amount, interestAmount, currency, notes` + `amountAed/Inr, exchangeRateUsed` | Indexed on `liability_id`; deleting a liability cascades to its transactions. `type` is `Charge` (new debt, increases outstanding) or `Payment` (cash paid; `interestAmount` is the portion that's a cost, not principal — only `amount - interestAmount` reduces outstanding) |
 
 **Column-naming quirk to know about**: columns are a mix of plain lowercase
 (`amount`, `currency`, `date`) and double-quoted camelCase (`"createdAt"`,
@@ -437,10 +442,9 @@ own `currentValueAed`/`currentValueInr`/`exchangeRateUsed` snapshot,
 recomputed only when `currentValue` or `currency` changes — the same rule
 Goals apply to `currentAmount`.
 
-**Feeds Net Worth and other aggregates.** `Dashboard.tsx` computes an
-assets-only Net Worth stat (all-time savings + gold's current value +
-investments' current value — there's no liability/debt tracking anywhere in
-this app, so this is gross assets, not a true net worth). `DubaiLife.tsx`'s
+**Feeds Net Worth and other aggregates.** `Dashboard.tsx` computes Net Worth
+via `computeNetWorth` (`utils/index.ts`) — see §7.11 for the full model,
+including why it's *not* simply "savings + gold + investments." `DubaiLife.tsx`'s
 lifetime-aggregate section and `Analytics.tsx`'s portfolio allocation
 chart both read through `computePortfolioStats` the same way.
 
@@ -486,6 +490,110 @@ matches today and inserts a SIP transaction for each:
   live project. The migration file's header comments explain how to check
   and how to test the function directly (`select run_sip_investments();`)
   without waiting for the schedule to fire.
+
+### 7.11 The financial model: Income, Living Expenses, Investments, Liabilities
+
+**The core rule: investing is converting cash into a different asset, not
+spending it.** Money that leaves the bank account to buy stocks, mutual
+funds, gold, an FD, etc. must never be counted as an expense, and must never
+just "disappear" from savings either — it's still yours, in a different
+form.
+
+This app already stores investments (`investments`/`investment_transactions`)
+and gold (`gold_purchases`) in their own tables, separate from `expenses` —
+so `expenses` has only ever contained real living-expense categories
+(`EXPENSE_CATEGORIES`, §7.2). The bug this section fixes wasn't "investments
+counted as expenses" (they weren't), it was that **Net Worth never
+subtracted the cash that left the bank to fund those purchases**, so it
+double-counted: once as cash still sitting there, and again as the asset it
+became. That inflated Net Worth by the full cost basis of everything ever
+invested (masked whenever gains happened to roughly offset it).
+
+**Paying down debt is the same idea as investing — converting cash into a
+reduced liability, not spending it.** Only the *interest* portion of a debt
+payment is a genuine cost. This matters because "just lower the liability's
+balance when you pay it off" silently inflates Net Worth: the liability
+shrinks but nothing records that the cash actually left the bank, so the
+same money would appear to still be sitting there *and* to have paid off the
+debt. `liability_transactions` (a Charge/Payment ledger, added in
+`0008_liability_transactions.sql`) exists specifically to close this gap —
+see below.
+
+Functions in `utils/index.ts` are the single source of truth for this model
+— every page that shows Income/Expenses/Investments/Liabilities/Savings/Net
+Worth should compute through them rather than re-deriving totals inline:
+
+- **`computeFinancialSummary({ income, incomeInr, livingExpenses,
+  livingExpensesInr, investments, investmentsInr, debtPrincipalPaid?,
+  debtPrincipalPaidInr?, debtInterest?, debtInterestInr? })`** — for a given
+  period (a month, or all-time), returns `{ livingExpenses, investments,
+  debtPrincipalPaid, debtInterest, cashRemaining, totalSaved, savingsRate }`
+  where:
+  - `cashRemaining = income - livingExpenses - investments - debtInterest -
+    debtPrincipalPaid`
+  - `totalSaved = investments + debtPrincipalPaid + cashRemaining` (this
+    always equals `income - livingExpenses - debtInterest`, algebraically —
+    it's computed via its components anyway so the breakdown stays visible)
+  - `savingsRate = totalSaved / income × 100`
+  - `investments` for a period comes from `computeInvestmentCashFlow`
+    (Buy/SIP pull cash out, Sell/Dividend put cash back in) plus
+    `computeGoldCashFlow` (gold has no live price feed, so its cost basis
+    doubles as its current value) — never from the `expenses` table.
+  - `debtPrincipalPaid`/`debtInterest` for a period come from
+    `computeDebtCashFlow` over that period's `liability_transactions` —
+    `Charge` rows are excluded (no cash moves on a charge; it just increases
+    what you owe, see below), `Payment` rows split into principal
+    (`amount - interestAmount`, "saved") and interest (a real cost).
+- **`computeNetWorth({ allTimeIncome, allTimeLivingExpenses, investedCash,
+  investmentsValue, debtPrincipalPaid, debtInterestPaid,
+  liabilitiesOutstanding, ... })`** — `cash = allTimeIncome -
+  allTimeLivingExpenses - investedCash - debtPrincipalPaid -
+  debtInterestPaid` (cash on hand net of every dirham/rupee ever pulled out
+  for investments/gold *or* to pay down a debt, principal and interest
+  both), then `netWorth = cash + investmentsValue - liabilitiesOutstanding`.
+  `investmentsValue` is current mark-to-market (investments' `currentValue`
+  + gold's cost basis); `investedCash` is the all-time cost basis pulled out
+  of cash for both; `liabilitiesOutstanding` comes from
+  `computePortfolioLiabilityStats` (below).
+
+`Dashboard.tsx` is the primary consumer: its stat grid shows Income, Living
+Expenses, Investments, Cash Remaining, Debt Paid Down, Total Saved, Savings
+Rate, and Net Worth, all period-scoped (except Net Worth, always all-time)
+via the month selector. `DubaiLife.tsx`'s "Total Saved" stat uses the same
+underlying math (pre-existing — its `totalEarnings - totalExpenses` was
+already numerically equal to `totalSaved`, just mislabeled "Total Savings";
+it doesn't yet account for debt, since that page predates Liabilities).
+
+**Liabilities** (`liabilities` + `liability_transactions` tables,
+`/liabilities` page) follow the exact same parent (holding) + child (ledger)
+shape as Investments (§7.10): `liabilities.balance` is the *opening* balance
+when a debt was first added — an anchor point, not a running total — and
+everything else (outstanding balance, principal paid, interest paid, total
+charged) is derived client-side from the ledger by `computeLiabilityStats`
+/ `computePortfolioLiabilityStats`, exactly the way `computeInvestmentStats`
+derives invested-amount from `investment_transactions`.
+
+- **`Charge`** — new debt incurred (a credit card purchase, drawing down a
+  loan further). Increases outstanding balance; no cash moves yet, so it
+  doesn't appear in any cash-flow figure — Net Worth drops immediately
+  though, since `liabilitiesOutstanding` rises while nothing on the asset
+  side changes (correctly modeling "you consumed something worth this much
+  without paying for it yet").
+- **`Payment`** — cash paid toward a debt. `amount` is the total paid;
+  `interestAmount` (optional) is the portion that's interest — only
+  `amount - interestAmount` (the principal) reduces the outstanding
+  balance. Both portions reduce cash on hand (via `computeDebtCashFlow`),
+  which is what keeps Net Worth from inflating when you pay off debt.
+- A liability's `status` (`active`/`closed`) is manual, set via "Mark as
+  Paid Off" on the detail page — same manual-status philosophy as
+  `investments.status`, not auto-derived from outstanding balance reaching
+  zero.
+
+**Deliberately out of scope**: a multi-account/wallet model and Transfer
+transactions (Bank↔Wallet, AED↔INR account). This app has no concept of
+"which account" a transaction belongs to today (only a `currency`), and
+Transfers only matter once multiple accounts exist — a materially bigger
+feature than this fix required.
 
 ## 8. Exchange rate refresh (`src/utils/exchangeRate.ts`)
 
@@ -588,9 +696,15 @@ auto-dismissing:
   carry `units`/`pricePerUnit`, even for a scheme-linked fund, so they
   don't contribute to the "Units Held" stat — a deliberate simplicity
   tradeoff, not a bug (see §7.10 for why).
-- **Net Worth is assets-only.** Dashboard's Net Worth stat (§7.10) sums
-  savings + gold + investments; there's no liability/debt tracking anywhere
-  in the schema, so it's gross assets rather than a textbook net worth.
+- **Liability payments don't auto-split into principal/interest.** A
+  `Payment` transaction's `interestAmount` is entered by hand (from your
+  statement) — there's no amortization schedule computed for you the way a
+  bank would. Fine for "what do I currently owe and what has interest cost
+  me," not a full loan calculator.
+- **No multi-account/wallet model or Transfers.** Every transaction has a
+  `currency` but not an "account" — so moving cash between a bank account and
+  a wallet, or between an AED and INR account, isn't representable. This is
+  a deliberate scope boundary (§7.11), not an oversight.
 - **The exchange-rate refresh is client-triggered only** — see §8.
 - **`README.md` is stale** (describes a pre-Supabase, localStorage-only
   version). Prefer this document for anything architectural; the README

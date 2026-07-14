@@ -101,7 +101,7 @@ export const Textarea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement
 );
 
 // Button
-type BtnVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+export type BtnVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 export const Button = ({
   children, variant = 'primary', className = '', onClick, disabled, ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant }) => {
@@ -194,13 +194,16 @@ export const PageHeader = ({ title, subtitle, action }: { title: string; subtitl
 
 // ConfirmDialog
 export const ConfirmDialog = ({
-  open, onClose, onConfirm, title, message
-}: { open: boolean; onClose: () => void; onConfirm: () => void; title: string; message: string }) => (
+  open, onClose, onConfirm, title, message, confirmLabel = 'Delete', confirmVariant = 'danger'
+}: {
+  open: boolean; onClose: () => void; onConfirm: () => void; title: string; message: string;
+  confirmLabel?: string; confirmVariant?: BtnVariant;
+}) => (
   <Modal open={open} onClose={onClose} title={title}>
     <p className="text-sm text-muted mb-5">{message}</p>
     <div className="flex justify-end gap-3">
       <Button variant="secondary" onClick={onClose}>Cancel</Button>
-      <Button variant="danger" onClick={() => { onConfirm(); onClose(); }}>Delete</Button>
+      <Button variant={confirmVariant} onClick={() => { onConfirm(); onClose(); }}>{confirmLabel}</Button>
     </div>
   </Modal>
 );

@@ -188,3 +188,80 @@ export interface InvestmentTransaction {
   amountInr?: number | null;
   exchangeRateUsed?: number | null;
 }
+
+export type LiabilityType = 'Loan' | 'Credit Card' | 'Other';
+export type LiabilityStatus = 'active' | 'closed';
+export type LiabilityTxnType = 'Charge' | 'Payment';
+
+export interface Liability {
+  id: string;
+  type: LiabilityType;
+  name: string;
+  currency: Currency;
+  // Opening balance — what you owed when this liability was first added.
+  // The current outstanding amount is derived from this plus the
+  // liability_transactions ledger (see computeLiabilityStats in utils),
+  // not stored redundantly — same philosophy as Investment.currentValue
+  // vs. its transaction ledger.
+  balance: number;
+  status: LiabilityStatus;
+  notes: string;
+  createdAt: string;
+  // AED/INR value of balance, frozen at create/update time. Null on legacy rows.
+  balanceAed?: number | null;
+  balanceInr?: number | null;
+  exchangeRateUsed?: number | null;
+}
+
+export interface LiabilityTransaction {
+  id: string;
+  liability_id: string;
+  type: LiabilityTxnType;
+  date: string;
+  // Total cash amount of this event. For a Payment, this may include an
+  // interest portion (see interestAmount) — only (amount - interestAmount)
+  // reduces the outstanding balance; the rest is a pure cash cost.
+  amount: number;
+  // Payment only: portion of `amount` that's interest, not principal.
+  // Null/0 for Charge, and for a Payment with no interest component.
+  interestAmount: number | null;
+  currency: Currency;
+  notes: string;
+  createdAt: string;
+  amountAed?: number | null;
+  amountInr?: number | null;
+  exchangeRateUsed?: number | null;
+}
+
+export interface LiabilityStats {
+  outstandingAed: number;
+  outstandingInr: number;
+  chargesAed: number;
+  chargesInr: number;
+  principalPaidAed: number;
+  principalPaidInr: number;
+  interestPaidAed: number;
+  interestPaidInr: number;
+}
+
+// Breakdown of where a period's income actually went: living expenses,
+// investments (converted, not spent), debt paid down (also converted, not
+// spent), debt interest (a genuine cost), and cash left over. See
+// docs/ARCHITECTURE.md §7.11 for the full model.
+export interface FinancialSummary {
+  income: number;
+  incomeInr: number;
+  livingExpenses: number;
+  livingExpensesInr: number;
+  investments: number;
+  investmentsInr: number;
+  debtPrincipalPaid: number;
+  debtPrincipalPaidInr: number;
+  debtInterest: number;
+  debtInterestInr: number;
+  cashRemaining: number;
+  cashRemainingInr: number;
+  totalSaved: number;
+  totalSavedInr: number;
+  savingsRate: number;
+}

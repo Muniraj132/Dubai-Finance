@@ -1,4 +1,4 @@
-import { Expense, Income, MonthlyStats, Investment, InvestmentTransaction, AppSettings } from '../types';
+import { Expense, Income, MonthlyStats, Investment, InvestmentTransaction, GoldPurchase, Liability, LiabilityTransaction, LiabilityStats, AppSettings, FinancialSummary } from '../types';
 
 export const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -101,6 +101,119 @@ export const computeMonthlyStats = (
     .sort((a, b) => a.month.localeCompare(b.month));
 };
 
+// ------------------------------------------------------------------
+// Financial model: Income vs. Living Expenses vs. Investments.
+//
+// Investing is converting cash into a different asset (stocks, mutual
+// funds, gold, ...), not spending it — it must never be counted as an
+// expense or vanish from "savings". See docs/ARCHITECTURE.md §7.11.
+// ------------------------------------------------------------------
+
+// Net cash that left the bank account to fund investment holdings, over the
+// given transactions. Buy/SIP pull cash out; Sell/Dividend put cash back in
+// (a dividend is money credited to your account — it only leaves cash again
+// if a separate Buy/SIP records reinvesting it).
+export const computeInvestmentCashFlow = (
+  transactions: InvestmentTransaction[],
+  rate: number,
+  salaryRateMap: Map<string, number>
+): { aed: number; inr: number } => {
+  let aed = 0, inr = 0;
+  transactions.forEach(t => {
+    const a = resolveAed(t.amount, t.currency, t.amountAed, rate);
+    const sign = (t.type === 'Buy' || t.type === 'SIP') ? 1 : -1;
+    aed += sign * a;
+    inr += sign * a * getMonthSalaryRate(getMonthKey(t.date), salaryRateMap, rate);
+  });
+  return { aed, inr };
+};
+
+// Cash spent on gold. Gold has no live price feed in this app (see
+// GoldTracker) — its "current value" is always its cost basis, so this
+// number doubles as gold's contribution to Net Worth's asset side.
+export const computeGoldCashFlow = (
+  purchases: GoldPurchase[],
+  rate: number,
+  salaryRateMap: Map<string, number>
+): { aed: number; inr: number } => {
+  let aed = 0, inr = 0;
+  purchases.forEach(g => {
+    const value = g.weightGrams * g.pricePerGram;
+    const a = resolveAed(value, g.currency, g.totalValueAed, rate);
+    aed += a;
+    inr += a * getMonthSalaryRate(getMonthKey(g.date), salaryRateMap, rate);
+  });
+  return { aed, inr };
+};
+
+// The core "where did this period's income go" breakdown. `investments` is
+// cash converted into investment assets (from computeInvestmentCashFlow +
+// computeGoldCashFlow); `debtPrincipalPaid` is cash converted into reduced
+// debt (from computeDebtCashFlow) — both are "saved," not spent, so neither
+// is part of `livingExpenses`. `debtInterest` is a genuine cost of
+// borrowing, so it does reduce Cash Remaining, same as a living expense
+// would. Total Saved = Investments + Debt Principal Paid + Cash Remaining,
+// which algebraically always equals Income − Living Expenses − Debt
+// Interest; it's computed via its components anyway so the breakdown stays
+// visible and consistent.
+export const computeFinancialSummary = (opts: {
+  income: number; incomeInr: number;
+  livingExpenses: number; livingExpensesInr: number;
+  investments: number; investmentsInr: number;
+  debtPrincipalPaid?: number; debtPrincipalPaidInr?: number;
+  debtInterest?: number; debtInterestInr?: number;
+}): FinancialSummary => {
+  const { income, incomeInr, livingExpenses, livingExpensesInr, investments, investmentsInr } = opts;
+  const debtPrincipalPaid = opts.debtPrincipalPaid ?? 0;
+  const debtPrincipalPaidInr = opts.debtPrincipalPaidInr ?? 0;
+  const debtInterest = opts.debtInterest ?? 0;
+  const debtInterestInr = opts.debtInterestInr ?? 0;
+
+  const cashRemaining = income - livingExpenses - investments - debtInterest - debtPrincipalPaid;
+  const cashRemainingInr = incomeInr - livingExpensesInr - investmentsInr - debtInterestInr - debtPrincipalPaidInr;
+  const totalSaved = investments + debtPrincipalPaid + cashRemaining;
+  const totalSavedInr = investmentsInr + debtPrincipalPaidInr + cashRemainingInr;
+  const savingsRate = income > 0 ? (totalSaved / income) * 100 : 0;
+  return {
+    income, incomeInr, livingExpenses, livingExpensesInr,
+    investments, investmentsInr, debtPrincipalPaid, debtPrincipalPaidInr,
+    debtInterest, debtInterestInr, cashRemaining, cashRemainingInr,
+    totalSaved, totalSavedInr, savingsRate,
+  };
+};
+
+export interface NetWorthInputs {
+  allTimeIncome: number; allTimeIncomeInr: number;
+  allTimeLivingExpenses: number; allTimeLivingExpensesInr: number;
+  // All-time cash that left the bank for investments + gold (cost basis).
+  investedCash: number; investedCashInr: number;
+  // Current mark-to-market value of everything invested (investments + gold).
+  investmentsValue: number; investmentsValueInr: number;
+  // All-time cash spent paying down debt principal, and on interest.
+  debtPrincipalPaid: number; debtPrincipalPaidInr: number;
+  debtInterestPaid: number; debtInterestPaidInr: number;
+  // Current outstanding balance across all liabilities (derived from their
+  // ledgers — see computePortfolioLiabilityStats).
+  liabilitiesOutstanding: number; liabilitiesOutstandingInr: number;
+}
+
+// Net Worth = cash on hand + what everything you own is worth today − what
+// you owe. Cash on hand must subtract every dirham/rupee that ever left the
+// bank to buy an investment/gold or to pay down a debt (principal and
+// interest both) — otherwise that money is counted twice: once as cash
+// still sitting there, and again as the asset it became or the debt it paid
+// off.
+export const computeNetWorth = (inputs: NetWorthInputs): { netWorth: number; netWorthInr: number } => {
+  const cash = inputs.allTimeIncome - inputs.allTimeLivingExpenses - inputs.investedCash
+    - inputs.debtPrincipalPaid - inputs.debtInterestPaid;
+  const cashInr = inputs.allTimeIncomeInr - inputs.allTimeLivingExpensesInr - inputs.investedCashInr
+    - inputs.debtPrincipalPaidInr - inputs.debtInterestPaidInr;
+  return {
+    netWorth: cash + inputs.investmentsValue - inputs.liabilitiesOutstanding,
+    netWorthInr: cashInr + inputs.investmentsValueInr - inputs.liabilitiesOutstandingInr,
+  };
+};
+
 export const exportToCSV = (data: Record<string, any>[], filename: string) => {
   if (!data.length) return;
   const headers = Object.keys(data[0]);
@@ -158,6 +271,112 @@ export const INVESTMENT_TYPE_BADGE: Record<string, string> = {
   PPF: 'yellow',
   NPS: 'orange',
   Other: 'theme',
+};
+
+export const LIABILITY_TYPES = ['Loan', 'Credit Card', 'Other'] as const;
+
+export const LIABILITY_TYPE_COLORS: Record<string, string> = {
+  Loan: '#ef4444',
+  'Credit Card': '#f97316',
+  Other: '#78716c',
+};
+
+// Keys into the Badge/StatCard colorMap in components/ui/index.tsx
+export const LIABILITY_TYPE_BADGE: Record<string, string> = {
+  Loan: 'red',
+  'Credit Card': 'orange',
+  Other: 'theme',
+};
+
+// Charge (new debt incurred) increases the outstanding balance; Payment
+// decreases it, but only by the principal portion — a Payment's
+// interestAmount is a pure cash cost that never touches the balance.
+export const computeLiabilityStats = (
+  liability: Liability,
+  transactions: LiabilityTransaction[],
+  rate: number
+): LiabilityStats => {
+  let chargesAed = 0, chargesInr = 0, principalPaidAed = 0, principalPaidInr = 0, interestPaidAed = 0, interestPaidInr = 0;
+
+  transactions.forEach(t => {
+    const txnRate = t.exchangeRateUsed ?? rate;
+    if (t.type === 'Charge') {
+      chargesAed += convertToAED(t.amount, t.currency, txnRate);
+      chargesInr += convertToINR(t.amount, t.currency, txnRate);
+    } else {
+      const interestRaw = t.interestAmount ?? 0;
+      const principalRaw = t.amount - interestRaw;
+      principalPaidAed += convertToAED(principalRaw, t.currency, txnRate);
+      principalPaidInr += convertToINR(principalRaw, t.currency, txnRate);
+      interestPaidAed += convertToAED(interestRaw, t.currency, txnRate);
+      interestPaidInr += convertToINR(interestRaw, t.currency, txnRate);
+    }
+  });
+
+  const openingAed = resolveAed(liability.balance, liability.currency, liability.balanceAed, rate);
+  const openingInr = resolveInr(liability.balance, liability.currency, liability.balanceInr, rate);
+  const outstandingAed = openingAed + chargesAed - principalPaidAed;
+  const outstandingInr = openingInr + chargesInr - principalPaidInr;
+
+  return { outstandingAed, outstandingInr, chargesAed, chargesInr, principalPaidAed, principalPaidInr, interestPaidAed, interestPaidInr };
+};
+
+export const groupByLiabilityId = (transactions: LiabilityTransaction[]): Map<string, LiabilityTransaction[]> => {
+  const map = new Map<string, LiabilityTransaction[]>();
+  transactions.forEach(t => {
+    const list = map.get(t.liability_id);
+    if (list) list.push(t);
+    else map.set(t.liability_id, [t]);
+  });
+  return map;
+};
+
+// Portfolio-wide totals across every liability — outstanding is what Net
+// Worth subtracts; the rest is for the Liabilities list view's stat cards.
+export const computePortfolioLiabilityStats = (
+  liabilities: Liability[],
+  transactions: LiabilityTransaction[],
+  rate: number
+): LiabilityStats => {
+  const byLiability = groupByLiabilityId(transactions);
+  return liabilities.reduce((acc, l) => {
+    const s = computeLiabilityStats(l, byLiability.get(l.id) ?? [], rate);
+    acc.outstandingAed += s.outstandingAed;
+    acc.outstandingInr += s.outstandingInr;
+    acc.chargesAed += s.chargesAed;
+    acc.chargesInr += s.chargesInr;
+    acc.principalPaidAed += s.principalPaidAed;
+    acc.principalPaidInr += s.principalPaidInr;
+    acc.interestPaidAed += s.interestPaidAed;
+    acc.interestPaidInr += s.interestPaidInr;
+    return acc;
+  }, { outstandingAed: 0, outstandingInr: 0, chargesAed: 0, chargesInr: 0, principalPaidAed: 0, principalPaidInr: 0, interestPaidAed: 0, interestPaidInr: 0 });
+};
+
+// Cash that moved because of debt this period: principal paid down (money
+// converted into reduced debt, like an investment) and interest paid (a
+// genuine cost). Charges are excluded — a charge increases what you owe
+// without any cash leaving the bank yet, so it never appears as a cash flow.
+export const computeDebtCashFlow = (
+  transactions: LiabilityTransaction[],
+  rate: number,
+  salaryRateMap: Map<string, number>
+): { principalAed: number; principalInr: number; interestAed: number; interestInr: number } => {
+  let principalAed = 0, principalInr = 0, interestAed = 0, interestInr = 0;
+  transactions.forEach(t => {
+    if (t.type !== 'Payment') return;
+    const txnRate = t.exchangeRateUsed ?? rate;
+    const interestRaw = t.interestAmount ?? 0;
+    const principalRaw = t.amount - interestRaw;
+    const monthRate = getMonthSalaryRate(getMonthKey(t.date), salaryRateMap, rate);
+    const pAed = convertToAED(principalRaw, t.currency, txnRate);
+    const iAed = convertToAED(interestRaw, t.currency, txnRate);
+    principalAed += pAed;
+    principalInr += pAed * monthRate;
+    interestAed += iAed;
+    interestInr += iAed * monthRate;
+  });
+  return { principalAed, principalInr, interestAed, interestInr };
 };
 
 export interface InvestmentStats {

@@ -1,7 +1,7 @@
 import { Download, FileText } from 'lucide-react';
-import { useExpenses, useIncomes, useGoals, useInvestments, useInvestmentTransactions, useSettings } from '../stores/useAppStore';
+import { useExpenses, useIncomes, useGoals, useInvestments, useInvestmentTransactions, useLiabilities, useLiabilityTransactions, useSettings } from '../stores/useAppStore';
 import { PageHeader, Button, Card } from '../components/ui';
-import { exportToCSV, formatDate, resolveAed, resolveInr } from '../utils';
+import { exportToCSV, formatDate, resolveAed, resolveInr, computeLiabilityStats, groupByLiabilityId } from '../utils';
 
 export default function Reports() {
   const expenses = useExpenses();
@@ -9,6 +9,8 @@ export default function Reports() {
   const goals = useGoals();
   const investments = useInvestments();
   const investmentTransactions = useInvestmentTransactions();
+  const liabilities = useLiabilities();
+  const liabilityTransactions = useLiabilityTransactions();
   const { aedToInrRate } = useSettings();
 
   const exportExpenses = () => {
@@ -97,12 +99,56 @@ export default function Reports() {
     );
   };
 
+  const exportLiabilities = () => {
+    const byLiability = groupByLiabilityId(liabilityTransactions);
+    exportToCSV(
+      liabilities.map(l => {
+        const s = computeLiabilityStats(l, byLiability.get(l.id) ?? [], aedToInrRate);
+        return {
+          Type: l.type,
+          Name: l.name,
+          Status: l.status,
+          OpeningBalance: l.balance,
+          Currency: l.currency,
+          OutstandingAED: s.outstandingAed,
+          OutstandingINR: s.outstandingInr,
+          PrincipalPaidAED: s.principalPaidAed,
+          InterestPaidAED: s.interestPaidAed,
+          Notes: l.notes,
+        };
+      }),
+      'liabilities'
+    );
+  };
+
+  const exportLiabilityTransactions = () => {
+    exportToCSV(
+      liabilityTransactions.map(t => {
+        const liability = liabilities.find(l => l.id === t.liability_id);
+        return {
+          Date: t.date,
+          Liability: liability?.name ?? t.liability_id,
+          Type: t.type,
+          Amount: t.amount,
+          InterestAmount: t.interestAmount ?? '',
+          Currency: t.currency,
+          AmountAED: resolveAed(t.amount, t.currency, t.amountAed, aedToInrRate),
+          AmountINR: resolveInr(t.amount, t.currency, t.amountInr, aedToInrRate),
+          Notes: t.notes,
+        };
+      }),
+      'liability_transactions'
+    );
+  };
+
   const reports = [
     { title: 'Expenses Report', description: `${expenses.length} expense records`, action: exportExpenses, color: 'red' },
     { title: 'Income Report', description: `${incomes.length} income records`, action: exportIncome, color: 'green' },
     { title: 'Goals Report', description: `${goals.length} financial goals`, action: exportGoals, color: 'blue' },
     { title: 'Investments Report', description: `${investments.length} holdings`, action: exportInvestments, color: 'purple' },
     { title: 'Investment Transactions', description: `${investmentTransactions.length} transactions`, action: exportInvestmentTransactions, color: 'amber' },
+    { title: 'Liabilities Report', description: `${liabilities.length} liabilities`, action: exportLiabilities, color: 'red' },
+    { title: 'Liability Transactions', description: `${liabilityTransactions.length} transactions`, action: exportLiabilityTransactions, color: 'orange' },
   ];
 
   return (

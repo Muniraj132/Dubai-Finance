@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
-import { TrendingUp, TrendingDown, PiggyBank, Percent, ArrowRightLeft, AlertTriangle, Landmark } from 'lucide-react';
-import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useSettings } from '../stores/useAppStore';
+import { TrendingUp, TrendingDown, PiggyBank, Percent, ArrowRightLeft, AlertTriangle, Landmark, LineChart, Wallet, HandCoins } from 'lucide-react';
+import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useInvestmentTransactions, useLiabilities, useLiabilityTransactions, useSettings } from '../stores/useAppStore';
 import { StatCard, Select } from '../components/ui';
-import { resolveAed, resolveInr, formatCurrency, getCurrentMonthKey, getMonthKey, getMonthLabel, computeMonthlyStats, getMonthSalaryRate, CATEGORY_COLORS } from '../utils';
+import {
+  resolveAed, resolveInr, formatCurrency, getCurrentMonthKey, getMonthKey, getMonthLabel, computeMonthlyStats, getMonthSalaryRate, CATEGORY_COLORS,
+  computeInvestmentCashFlow, computeGoldCashFlow, computeDebtCashFlow, computeFinancialSummary, computeNetWorth, computePortfolioLiabilityStats,
+} from '../utils';
 import { useSalaryRateMap } from '../hooks';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 
@@ -35,6 +38,9 @@ export default function Dashboard() {
   const incomes = useIncomes();
   const goldPurchases = useGoldPurchases();
   const investments = useInvestments();
+  const investmentTransactions = useInvestmentTransactions();
+  const liabilities = useLiabilities();
+  const liabilityTransactions = useLiabilityTransactions();
   const settings = useSettings();
   const { aedToInrRate } = settings;
 
@@ -48,8 +54,11 @@ export default function Dashboard() {
     const set = new Set<string>([currentMonth]);
     expenses.forEach(e => set.add(getMonthKey(e.date)));
     incomes.forEach(i => set.add(getMonthKey(i.date)));
+    investmentTransactions.forEach(t => set.add(getMonthKey(t.date)));
+    goldPurchases.forEach(g => set.add(getMonthKey(g.date)));
+    liabilityTransactions.forEach(t => set.add(getMonthKey(t.date)));
     return Array.from(set).sort().reverse();
-  }, [expenses, incomes, currentMonth]);
+  }, [expenses, incomes, investmentTransactions, goldPurchases, liabilityTransactions, currentMonth]);
 
   // Every AED figure for a given month is valued at that month's salary
   // conversion rate (see buildSalaryRateMap) instead of each transaction's
@@ -65,6 +74,18 @@ export default function Dashboard() {
   const filteredIncomes = useMemo(() =>
     isAllTime ? incomes : incomes.filter(i => getMonthKey(i.date) === selectedMonth),
     [incomes, isAllTime, selectedMonth]
+  );
+  const filteredInvestmentTxns = useMemo(() =>
+    isAllTime ? investmentTransactions : investmentTransactions.filter(t => getMonthKey(t.date) === selectedMonth),
+    [investmentTransactions, isAllTime, selectedMonth]
+  );
+  const filteredGoldPurchases = useMemo(() =>
+    isAllTime ? goldPurchases : goldPurchases.filter(g => getMonthKey(g.date) === selectedMonth),
+    [goldPurchases, isAllTime, selectedMonth]
+  );
+  const filteredLiabilityTxns = useMemo(() =>
+    isAllTime ? liabilityTransactions : liabilityTransactions.filter(t => getMonthKey(t.date) === selectedMonth),
+    [liabilityTransactions, isAllTime, selectedMonth]
   );
 
   const periodExpenses = useMemo(() =>
@@ -91,11 +112,37 @@ export default function Dashboard() {
     [filteredIncomes, salaryRateMap, aedToInrRate]
   );
 
-  const periodSavings = periodIncome - periodExpenses;
-  const periodSavingsInr = periodIncomeInr - periodExpensesInr;
-  const savingsRate = periodIncome > 0 ? (periodSavings / periodIncome) * 100 : 0;
+  // Investments — cash converted into a different asset (stocks, funds,
+  // gold, ...), never a living expense. See computeFinancialSummary in utils.
+  const periodInvestmentCash = useMemo(() =>
+    computeInvestmentCashFlow(filteredInvestmentTxns, aedToInrRate, salaryRateMap),
+    [filteredInvestmentTxns, aedToInrRate, salaryRateMap]
+  );
+  const periodGoldCash = useMemo(() =>
+    computeGoldCashFlow(filteredGoldPurchases, aedToInrRate, salaryRateMap),
+    [filteredGoldPurchases, aedToInrRate, salaryRateMap]
+  );
+  const periodInvestments = periodInvestmentCash.aed + periodGoldCash.aed;
+  const periodInvestmentsInr = periodInvestmentCash.inr + periodGoldCash.inr;
 
-  // Spending warnings
+  // Debt paid down is also "saved" (cash converted into reduced debt, same
+  // as an investment); debt interest is a genuine cost, like a living
+  // expense. See computeDebtCashFlow / computeFinancialSummary in utils.
+  const periodDebtCash = useMemo(() =>
+    computeDebtCashFlow(filteredLiabilityTxns, aedToInrRate, salaryRateMap),
+    [filteredLiabilityTxns, aedToInrRate, salaryRateMap]
+  );
+
+  const summary = useMemo(() => computeFinancialSummary({
+    income: periodIncome, incomeInr: periodIncomeInr,
+    livingExpenses: periodExpenses, livingExpensesInr: periodExpensesInr,
+    investments: periodInvestments, investmentsInr: periodInvestmentsInr,
+    debtPrincipalPaid: periodDebtCash.principalAed, debtPrincipalPaidInr: periodDebtCash.principalInr,
+    debtInterest: periodDebtCash.interestAed, debtInterestInr: periodDebtCash.interestInr,
+  }), [periodIncome, periodIncomeInr, periodExpenses, periodExpensesInr, periodInvestments, periodInvestmentsInr, periodDebtCash]);
+
+  // Spending warnings — based on living expenses vs. income only; investing
+  // heavily isn't overspending, it's saving in a different form.
   const spendingRatio = periodIncome > 0 ? periodExpenses / periodIncome : 0;
   const showOverBudget = periodIncome > 0 && spendingRatio >= 1;
   const showHighSpending = periodIncome > 0 && spendingRatio >= 0.8 && spendingRatio < 1;
@@ -106,30 +153,43 @@ export default function Dashboard() {
     [expenses, incomes, aedToInrRate]
   );
 
-  // Net worth (assets-only — this app doesn't track liabilities): all-time
-  // savings + gold's current value + investments' current value, all
-  // resolved through their frozen historical snapshots (§7.1).
-  const netWorth = useMemo(() => {
+  // Net Worth = cash on hand + everything you own today − what you owe.
+  // Cash on hand must subtract every dirham/rupee that ever left the bank to
+  // buy an investment/gold or to pay down a debt (principal and interest
+  // both), or it's counted twice: once as cash still sitting there, and
+  // again as the asset it became or the debt it paid off. See computeNetWorth.
+  const { netWorth, netWorthInr } = useMemo(() => {
     const allTimeIncome = incomes.reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0);
-    const allTimeExpenses = expenses.reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0);
-    const goldValue = goldPurchases.reduce((s, g) => s + resolveAed(g.weightGrams * g.pricePerGram, g.currency, g.totalValueAed, aedToInrRate), 0);
-    const investmentsValue = investments.reduce((s, i) => s + resolveAed(i.currentValue, i.currency, i.currentValueAed, aedToInrRate), 0);
-    return (allTimeIncome - allTimeExpenses) + goldValue + investmentsValue;
-  }, [incomes, expenses, goldPurchases, investments, aedToInrRate]);
-
-  const netWorthInr = useMemo(() => {
     const allTimeIncomeInr = incomes.reduce((s, i) => {
       const aed = resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate);
       return s + aed * getMonthSalaryRate(getMonthKey(i.date), salaryRateMap, aedToInrRate);
     }, 0);
+    const allTimeExpenses = expenses.reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0);
     const allTimeExpensesInr = expenses.reduce((s, e) => {
       const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
       return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
     }, 0);
-    const goldValueInr = goldPurchases.reduce((s, g) => s + resolveInr(g.weightGrams * g.pricePerGram, g.currency, g.totalValueInr, aedToInrRate), 0);
+
+    const allTimeInvestmentCash = computeInvestmentCashFlow(investmentTransactions, aedToInrRate, salaryRateMap);
+    const allTimeGoldCash = computeGoldCashFlow(goldPurchases, aedToInrRate, salaryRateMap);
+    const investmentsValue = investments.reduce((s, i) => s + resolveAed(i.currentValue, i.currency, i.currentValueAed, aedToInrRate), 0);
     const investmentsValueInr = investments.reduce((s, i) => s + resolveInr(i.currentValue, i.currency, i.currentValueInr, aedToInrRate), 0);
-    return (allTimeIncomeInr - allTimeExpensesInr) + goldValueInr + investmentsValueInr;
-  }, [incomes, expenses, goldPurchases, investments, aedToInrRate, salaryRateMap]);
+    // Gold has no live price feed — cost basis doubles as current value.
+    const allTimeDebtCash = computeDebtCashFlow(liabilityTransactions, aedToInrRate, salaryRateMap);
+    const liabilityStats = computePortfolioLiabilityStats(liabilities, liabilityTransactions, aedToInrRate);
+
+    return computeNetWorth({
+      allTimeIncome, allTimeIncomeInr,
+      allTimeLivingExpenses: allTimeExpenses, allTimeLivingExpensesInr: allTimeExpensesInr,
+      investedCash: allTimeInvestmentCash.aed + allTimeGoldCash.aed,
+      investedCashInr: allTimeInvestmentCash.inr + allTimeGoldCash.inr,
+      investmentsValue: investmentsValue + allTimeGoldCash.aed,
+      investmentsValueInr: investmentsValueInr + allTimeGoldCash.inr,
+      debtPrincipalPaid: allTimeDebtCash.principalAed, debtPrincipalPaidInr: allTimeDebtCash.principalInr,
+      debtInterestPaid: allTimeDebtCash.interestAed, debtInterestPaidInr: allTimeDebtCash.interestInr,
+      liabilitiesOutstanding: liabilityStats.outstandingAed, liabilitiesOutstandingInr: liabilityStats.outstandingInr,
+    });
+  }, [incomes, expenses, goldPurchases, investments, investmentTransactions, liabilities, liabilityTransactions, aedToInrRate, salaryRateMap]);
 
   const chartData = monthlyStats.map(s => ({
     month: getMonthLabel(s.month),
@@ -171,7 +231,7 @@ export default function Dashboard() {
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30">
           <AlertTriangle size={16} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
           <div>
-            <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income {periodLabel}!</div>
+            <div className="text-sm font-semibold text-red-700 dark:text-red-400">Living expenses exceed income {periodLabel}!</div>
             <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
               Spent AED {periodExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{periodExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {periodIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
             </div>
@@ -193,41 +253,62 @@ export default function Dashboard() {
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total Income"
-          value={`AED ${periodIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(periodIncomeInr, 'INR')}`}
+          title="Income"
+          value={`AED ${summary.income.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(summary.incomeInr, 'INR')}`}
           icon={<TrendingUp size={16} />}
           color="green"
         />
         <StatCard
-          title="Total Expenses"
-          value={`AED ${periodExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(periodExpensesInr, 'INR')}`}
+          title="Living Expenses"
+          value={`AED ${summary.livingExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(summary.livingExpensesInr, 'INR')}`}
           icon={<TrendingDown size={16} />}
           color="red"
         />
         <StatCard
-          title="Savings"
-          value={`AED ${periodSavings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(periodSavingsInr, 'INR')}`}
+          title="Investments"
+          value={`AED ${summary.investments.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(summary.investmentsInr, 'INR')} · stocks, funds, gold`}
+          icon={<LineChart size={16} />}
+          color="blue"
+        />
+        <StatCard
+          title="Cash Remaining"
+          value={`AED ${summary.cashRemaining.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(summary.cashRemainingInr, 'INR')}`}
+          icon={<Wallet size={16} />}
+          color="cyan"
+        />
+      </div>
+
+      {/* Debt Paid Down, Total Saved, Savings Rate, Net Worth */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Debt Paid Down"
+          value={`AED ${summary.debtPrincipalPaid.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(summary.debtPrincipalPaidInr, 'INR')} · +${formatCurrency(summary.debtInterest, 'AED')} interest`}
+          icon={<HandCoins size={16} />}
+          color="green"
+        />
+        <StatCard
+          title="Total Saved"
+          value={`AED ${summary.totalSaved.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(summary.totalSavedInr, 'INR')} · investments + debt paid + cash`}
           icon={<PiggyBank size={16} />}
           color="cyan"
         />
         <StatCard
           title="Savings Rate"
-          value={`${savingsRate.toFixed(1)}%`}
-          sub={savingsRate >= 30 ? '🎉 Excellent!' : savingsRate >= 20 ? '👍 Good' : '⚠️ Low'}
+          value={`${summary.savingsRate.toFixed(1)}%`}
+          sub={summary.savingsRate >= 30 ? '🎉 Excellent!' : summary.savingsRate >= 20 ? '👍 Good' : '⚠️ Low'}
           icon={<Percent size={16} />}
           color="theme"
         />
-      </div>
-
-      {/* Net Worth */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatCard
           title="Net Worth"
           value={`AED ${netWorth.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(netWorthInr, 'INR')} · savings + gold + investments`}
+          sub={`≈ ${formatCurrency(netWorthInr, 'INR')} · cash + investments + gold − liabilities`}
           icon={<Landmark size={16} />}
           color="blue"
         />

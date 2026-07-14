@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../utils/supabase';
 import { useAuthStore } from './useAuthStore';
-import { Expense, Income, Goal, Budget, GoldPurchase, AppSettings, ChitFund, ChitInstallment, Investment, InvestmentTransaction, Currency } from '../types';
+import { Expense, Income, Goal, Budget, GoldPurchase, AppSettings, ChitFund, ChitInstallment, Investment, InvestmentTransaction, Liability, LiabilityTransaction, Currency } from '../types';
 import { generateId, convertToAED, convertToINR } from '../utils';
 
 // useAuthStore already keeps the logged-in user in memory (synced via
@@ -33,6 +33,8 @@ interface AppState {
   chitInstallments: ChitInstallment[];
   investments: Investment[];
   investmentTransactions: InvestmentTransaction[];
+  liabilities: Liability[];
+  liabilityTransactions: LiabilityTransaction[];
   settings: AppSettings;
   isLoading: boolean;
   rateJustUpdated: boolean;
@@ -78,6 +80,14 @@ interface AppState {
   updateInvestmentTransaction: (id: string, txn: Partial<InvestmentTransaction>) => Promise<void>;
   deleteInvestmentTransaction: (id: string) => Promise<void>;
 
+  addLiability: (liability: Omit<Liability, 'id' | 'createdAt'>) => Promise<void>;
+  updateLiability: (id: string, liability: Partial<Liability>) => Promise<void>;
+  deleteLiability: (id: string) => Promise<void>;
+
+  addLiabilityTransaction: (txn: Omit<LiabilityTransaction, 'id' | 'createdAt'>) => Promise<void>;
+  updateLiabilityTransaction: (id: string, txn: Partial<LiabilityTransaction>) => Promise<void>;
+  deleteLiabilityTransaction: (id: string) => Promise<void>;
+
   updateSettings: (settings: Partial<AppSettings>) => Promise<void>;
 }
 
@@ -109,6 +119,8 @@ export const useAppStore = create<AppState>()((set, get) => {
     chitInstallments: [],
     investments: [],
     investmentTransactions: [],
+    liabilities: [],
+    liabilityTransactions: [],
     settings: DEFAULT_SETTINGS,
     isLoading: false,
     rateJustUpdated: false,
@@ -119,7 +131,7 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     initialize: async () => {
       set({ isLoading: true });
-      const [expenses, incomes, goals, budgets, goldPurchases, chitFunds, chitInstallments, investments, investmentTransactions, settings] = await Promise.all([
+      const [expenses, incomes, goals, budgets, goldPurchases, chitFunds, chitInstallments, investments, investmentTransactions, liabilities, liabilityTransactions, settings] = await Promise.all([
         supabase.from('expenses').select('*').order('createdAt', { ascending: false }),
         supabase.from('incomes').select('*').order('createdAt', { ascending: false }),
         supabase.from('goals').select('*').order('createdAt', { ascending: false }),
@@ -129,6 +141,8 @@ export const useAppStore = create<AppState>()((set, get) => {
         supabase.from('chit_installments').select('*').order('month_no', { ascending: true }),
         supabase.from('investments').select('*').order('createdAt', { ascending: false }),
         supabase.from('investment_transactions').select('*').order('date', { ascending: false }),
+        supabase.from('liabilities').select('*').order('createdAt', { ascending: false }),
+        supabase.from('liability_transactions').select('*').order('date', { ascending: false }),
         supabase.from('settings').select('*').maybeSingle(),
       ]);
       set({
@@ -141,6 +155,8 @@ export const useAppStore = create<AppState>()((set, get) => {
         chitInstallments: chitInstallments.data ?? [],
         investments: investments.data ?? [],
         investmentTransactions: investmentTransactions.data ?? [],
+        liabilities: liabilities.data ?? [],
+        liabilityTransactions: liabilityTransactions.data ?? [],
         settings: settings.data ?? DEFAULT_SETTINGS,
         isLoading: false,
       });
@@ -156,6 +172,8 @@ export const useAppStore = create<AppState>()((set, get) => {
       chitInstallments: [],
       investments: [],
       investmentTransactions: [],
+      liabilities: [],
+      liabilityTransactions: [],
       settings: DEFAULT_SETTINGS,
       lastError: null,
     }),
@@ -449,6 +467,78 @@ export const useAppStore = create<AppState>()((set, get) => {
       );
     },
 
+    addLiability: async (liability) => {
+      const rate = get().settings.aedToInrRate;
+      const newLiability: Liability = {
+        ...liability,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+        balanceAed: convertToAED(liability.balance, liability.currency, rate),
+        balanceInr: convertToINR(liability.balance, liability.currency, rate),
+        exchangeRateUsed: rate,
+      };
+      const uid = getUid();
+      await writeThrough('liabilities', [newLiability, ...get().liabilities], () =>
+        supabase.from('liabilities').insert({ ...newLiability, user_id: uid })
+      );
+    },
+    updateLiability: async (id, patch) => {
+      const existing = get().liabilities.find((l) => l.id === id);
+      let extra: Partial<Liability> = {};
+      if (existing && (patch.balance !== undefined || patch.currency !== undefined)) {
+        const rate = get().settings.aedToInrRate;
+        const balance = patch.balance ?? existing.balance;
+        const currency = patch.currency ?? existing.currency;
+        extra = {
+          balanceAed: convertToAED(balance, currency, rate),
+          balanceInr: convertToINR(balance, currency, rate),
+          exchangeRateUsed: rate,
+        };
+      }
+      const fullPatch = { ...patch, ...extra };
+      await writeThrough('liabilities', get().liabilities.map((l) => (l.id === id ? { ...l, ...fullPatch } : l)), () =>
+        supabase.from('liabilities').update(fullPatch).eq('id', id)
+      );
+    },
+    deleteLiability: async (id) => {
+      const prevTransactions = get().liabilityTransactions;
+      await writeThrough('liabilities', get().liabilities.filter((l) => l.id !== id), async () => {
+        set({ liabilityTransactions: prevTransactions.filter((t) => t.liability_id !== id) });
+        const { error } = await supabase.from('liabilities').delete().eq('id', id);
+        if (error) set({ liabilityTransactions: prevTransactions });
+        return { error };
+      });
+    },
+
+    addLiabilityTransaction: async (txn) => {
+      const rate = get().settings.aedToInrRate;
+      const newTxn: LiabilityTransaction = {
+        ...txn,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+        ...snapshotRates(txn.amount, txn.currency, rate),
+      };
+      const uid = getUid();
+      await writeThrough('liabilityTransactions', [newTxn, ...get().liabilityTransactions], () =>
+        supabase.from('liability_transactions').insert({ ...newTxn, user_id: uid })
+      );
+    },
+    updateLiabilityTransaction: async (id, patch) => {
+      const existing = get().liabilityTransactions.find((t) => t.id === id);
+      const extra = existing && (patch.amount !== undefined || patch.currency !== undefined)
+        ? snapshotRates(patch.amount ?? existing.amount, patch.currency ?? existing.currency, get().settings.aedToInrRate)
+        : {};
+      const fullPatch = { ...patch, ...extra };
+      await writeThrough('liabilityTransactions', get().liabilityTransactions.map((t) => (t.id === id ? { ...t, ...fullPatch } : t)), () =>
+        supabase.from('liability_transactions').update(fullPatch).eq('id', id)
+      );
+    },
+    deleteLiabilityTransaction: async (id) => {
+      await writeThrough('liabilityTransactions', get().liabilityTransactions.filter((t) => t.id !== id), () =>
+        supabase.from('liability_transactions').delete().eq('id', id)
+      );
+    },
+
     updateSettings: async (settings) => {
       const merged = { ...get().settings, ...settings };
       const user = useAuthStore.getState().user;
@@ -470,3 +560,5 @@ export const useChitFunds = () => useAppStore((s) => s.chitFunds);
 export const useChitInstallments = () => useAppStore((s) => s.chitInstallments);
 export const useInvestments = () => useAppStore((s) => s.investments);
 export const useInvestmentTransactions = () => useAppStore((s) => s.investmentTransactions);
+export const useLiabilities = () => useAppStore((s) => s.liabilities);
+export const useLiabilityTransactions = () => useAppStore((s) => s.liabilityTransactions);

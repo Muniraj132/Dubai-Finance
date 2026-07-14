@@ -3,7 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard, CreditCard, TrendingUp, Target, Gem, BarChart3,
   Wallet, Download, Sun, Moon, Calculator, Palmtree, Settings, Menu, X,
-  ChevronRight, User, LogOut, IndianRupee, AlertCircle, LineChart,
+  ChevronRight, User, LogOut, IndianRupee, AlertCircle, LineChart, Scale,
 } from 'lucide-react';
 import { useAppStore, useSettings } from '../../stores/useAppStore';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -17,6 +17,7 @@ const navItems = [
   { to: '/goals', icon: Target, label: 'Goals' },
   { to: '/gold', icon: Gem, label: 'Gold Tracker' },
   { to: '/investments', icon: LineChart, label: 'Investments' },
+  { to: '/liabilities', icon: Scale, label: 'Liabilities' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/budget', icon: Wallet, label: 'Budget Planner' },
   { to: '/converter', icon: Calculator, label: 'AED → INR' },
