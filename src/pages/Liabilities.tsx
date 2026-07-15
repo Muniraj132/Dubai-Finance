@@ -208,29 +208,29 @@ export default function Liabilities() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title="Total Outstanding"
-              value={`AED ${portfolioStats.outstandingAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-              sub={`≈ ${formatCurrency(portfolioStats.outstandingInr, 'INR')}`}
+              value={formatCurrency(portfolioStats.outstandingInr, 'INR')}
+              sub={`≈ AED ${portfolioStats.outstandingAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
               icon={<Scale size={16} />}
               color="red"
             />
             <StatCard
               title="Total Charged"
-              value={`AED ${portfolioStats.chargesAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-              sub={`≈ ${formatCurrency(portfolioStats.chargesInr, 'INR')}`}
+              value={formatCurrency(portfolioStats.chargesInr, 'INR')}
+              sub={`≈ AED ${portfolioStats.chargesAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
               icon={<CreditCard size={16} />}
               color="orange"
             />
             <StatCard
               title="Principal Paid"
-              value={`AED ${portfolioStats.principalPaidAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-              sub={`≈ ${formatCurrency(portfolioStats.principalPaidInr, 'INR')}`}
+              value={formatCurrency(portfolioStats.principalPaidInr, 'INR')}
+              sub={`≈ AED ${portfolioStats.principalPaidAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
               icon={<HandCoins size={16} />}
               color="green"
             />
             <StatCard
               title="Interest Paid"
-              value={`AED ${portfolioStats.interestPaidAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-              sub={`≈ ${formatCurrency(portfolioStats.interestPaidInr, 'INR')}`}
+              value={formatCurrency(portfolioStats.interestPaidInr, 'INR')}
+              sub={`≈ AED ${portfolioStats.interestPaidAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
               icon={<Scale size={16} />}
               color="amber"
             />

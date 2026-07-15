@@ -24,10 +24,12 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
               <span className="text-primary capitalize">{p.name}:</span>
-              <span className="font-semibold text-primary">AED {typeof p.value === 'number' ? p.value.toLocaleString('en-AE', { maximumFractionDigits: 0 }) : p.value}</span>
+              <span className="font-semibold text-primary">
+                {typeof inrValue === 'number' ? `₹${inrValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : `AED ${typeof p.value === 'number' ? p.value.toLocaleString('en-AE', { maximumFractionDigits: 0 }) : p.value}`}
+              </span>
             </div>
             {typeof inrValue === 'number' && (
-              <div className="text-muted ml-4">≈ ₹{inrValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <div className="text-muted ml-4">≈ AED {typeof p.value === 'number' ? p.value.toLocaleString('en-AE', { maximumFractionDigits: 0 }) : p.value}</div>
             )}
           </div>
         );
@@ -63,8 +65,6 @@ export default function Analytics() {
     savingsInr: Math.round(s.savingsInr),
   }));
 
-  const currentMonthRate = getMonthSalaryRate(currentMonth, salaryRateMap, aedToInrRate);
-
   // Overall (all-time) summary — income/expenses valued per-transaction at
   // that month's salary rate, same model as Dashboard's net worth.
   const allTimeIncome = useMemo(() =>
@@ -73,6 +73,7 @@ export default function Analytics() {
   );
   const allTimeIncomeInr = useMemo(() =>
     incomes.reduce((s, i) => {
+      if (i.currency === 'INR') return s + i.amount;
       const aed = resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate);
       return s + aed * getMonthSalaryRate(getMonthKey(i.date), salaryRateMap, aedToInrRate);
     }, 0),
@@ -84,6 +85,7 @@ export default function Analytics() {
   );
   const allTimeExpensesInr = useMemo(() =>
     expenses.reduce((s, e) => {
+      if (e.currency === 'INR') return s + e.amount;
       const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
       return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
     }, 0),
@@ -105,11 +107,26 @@ export default function Analytics() {
       .reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
     [expenses, currentMonth, aedToInrRate]
   );
-  const currentMonthExpensesInr = useMemo(() => currentMonthExpenses * currentMonthRate, [currentMonthExpenses, currentMonthRate]);
+  const currentMonthExpensesInr = useMemo(() =>
+    expenses.filter(e => getMonthKey(e.date) === currentMonth).reduce((s, e) => {
+      if (e.currency === 'INR') return s + e.amount;
+      const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+      return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
+    }, 0),
+    [expenses, currentMonth, salaryRateMap, aedToInrRate]
+  );
   const currentMonthIncome = useMemo(() =>
     incomes.filter(i => getMonthKey(i.date) === currentMonth)
       .reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
     [incomes, currentMonth, aedToInrRate]
+  );
+  const currentMonthIncomeInr = useMemo(() =>
+    incomes.filter(i => getMonthKey(i.date) === currentMonth).reduce((s, i) => {
+      if (i.currency === 'INR') return s + i.amount;
+      const aed = resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate);
+      return s + aed * getMonthSalaryRate(getMonthKey(i.date), salaryRateMap, aedToInrRate);
+    }, 0),
+    [incomes, currentMonth, salaryRateMap, aedToInrRate]
   );
   const spendingRatio = currentMonthIncome > 0 ? currentMonthExpenses / currentMonthIncome : 0;
   const showOverBudget = currentMonthIncome > 0 && spendingRatio >= 1;
@@ -119,9 +136,9 @@ export default function Analytics() {
     const map = new Map<string, { value: number; valueInr: number }>();
     expenses.forEach(e => {
       const amt = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
-      const rate = getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
+      const inrAmt = e.currency === 'INR' ? e.amount : amt * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
       const prev = map.get(e.category) ?? { value: 0, valueInr: 0 };
-      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amt * rate });
+      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + inrAmt });
     });
     return Array.from(map.entries())
       .map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
@@ -132,13 +149,14 @@ export default function Analytics() {
     const map = new Map<string, { value: number; valueInr: number }>();
     expenses.filter(e => getMonthKey(e.date) === currentMonth).forEach(e => {
       const amt = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+      const inrAmt = e.currency === 'INR' ? e.amount : amt * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
       const prev = map.get(e.category) ?? { value: 0, valueInr: 0 };
-      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amt * currentMonthRate });
+      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + inrAmt });
     });
     return Array.from(map.entries())
       .map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
       .sort((a, b) => b.value - a.value);
-  }, [expenses, currentMonth, aedToInrRate, currentMonthRate]);
+  }, [expenses, currentMonth, aedToInrRate, salaryRateMap]);
 
   const portfolioAllocation = useMemo(() => {
     const map = new Map<string, { value: number; valueInr: number }>();
@@ -155,7 +173,11 @@ export default function Analytics() {
   const investmentComparison = useMemo(() =>
     investments.map(inv => {
       const s = computeInvestmentStats(inv, investmentTransactions.filter(t => t.investment_id === inv.id), aedToInrRate);
-      return { name: inv.name, invested: Math.round(s.investedAed), current: Math.round(s.currentValueAed) };
+      return {
+        name: inv.name,
+        invested: Math.round(s.investedInr), investedAed: Math.round(s.investedAed),
+        current: Math.round(s.currentValueInr), currentAed: Math.round(s.currentValueAed),
+      };
     }).sort((a, b) => b.current - a.current),
     [investments, investmentTransactions, aedToInrRate]
   );
@@ -179,7 +201,7 @@ export default function Analytics() {
           <div>
             <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income this month!</div>
             <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
-              Spent AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {currentMonthIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Review your spending categories below.
+              Spent ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} (AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}) vs income ₹{currentMonthIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}. Review your spending categories below.
             </div>
           </div>
         </div>
@@ -190,7 +212,7 @@ export default function Analytics() {
           <div>
             <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
             <div className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
-              AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(currentMonthIncome - currentMonthExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} left this month.
+              ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} spent (AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}). Only ₹{(currentMonthIncomeInr - currentMonthExpensesInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })} left this month.
             </div>
           </div>
         </div>
@@ -207,28 +229,28 @@ export default function Analytics() {
           <div className="rounded-xl bg-green-500/5 border border-green-500/15 px-4 py-3">
             <div className="text-xs text-muted mb-1">Total Income</div>
             <div className="text-lg font-bold text-green-600 dark:text-green-400">
-              AED {allTimeIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+              ₹{allTimeIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
             <div className="text-xs text-muted mt-0.5">
-              ≈ ₹{allTimeIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              ≈ AED {allTimeIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
             </div>
           </div>
           <div className="rounded-xl bg-red-500/5 border border-red-500/15 px-4 py-3">
             <div className="text-xs text-muted mb-1">Total Expenses</div>
             <div className="text-lg font-bold text-red-600 dark:text-red-400">
-              AED {allTimeExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+              ₹{allTimeExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
             <div className="text-xs text-muted mt-0.5">
-              ≈ ₹{allTimeExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              ≈ AED {allTimeExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
             </div>
           </div>
           <div className="rounded-xl bg-blue-500/5 border border-blue-500/15 px-4 py-3">
             <div className="text-xs text-muted mb-1">Investments</div>
             <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
-              AED {portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+              ₹{portfolioStats.currentValueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
             <div className="text-xs text-muted mt-0.5">
-              ≈ ₹{portfolioStats.currentValueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              ≈ AED {portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
             </div>
           </div>
           <div className="rounded-xl bg-purple-500/5 border border-purple-500/15 px-4 py-3">
@@ -250,16 +272,16 @@ export default function Analytics() {
             <div className="card bg-green-500/5 border-green-500/20">
               <div className="text-xs text-green-700 dark:text-green-400 font-medium mb-1">🏆 Best Saving Month</div>
               <div className="text-primary font-bold">{getMonthLabel(bestSavingMonth.month)}</div>
-              <div className="text-sm text-muted">AED {bestSavingMonth.savings.toLocaleString('en-AE', { maximumFractionDigits: 0 })} saved</div>
-              <div className="text-xs text-muted mt-0.5">≈ ₹{bestSavingMonth.savingsInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <div className="text-sm text-muted">₹{bestSavingMonth.savingsInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} saved</div>
+              <div className="text-xs text-muted mt-0.5">≈ AED {bestSavingMonth.savings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</div>
             </div>
           )}
           {worstSpendingMonth && (
             <div className="card bg-red-500/5 border-red-500/20">
               <div className="text-xs text-red-700 dark:text-red-400 font-medium mb-1">📊 Highest Spending Month</div>
               <div className="text-primary font-bold">{getMonthLabel(worstSpendingMonth.month)}</div>
-              <div className="text-sm text-muted">AED {worstSpendingMonth.expenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent</div>
-              <div className="text-xs text-muted mt-0.5">≈ ₹{worstSpendingMonth.expensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <div className="text-sm text-muted">₹{worstSpendingMonth.expensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} spent</div>
+              <div className="text-xs text-muted mt-0.5">≈ AED {worstSpendingMonth.expenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</div>
             </div>
           )}
         </div>
@@ -300,7 +322,7 @@ export default function Analytics() {
                       <Cell key={entry.name} fill={INVESTMENT_TYPE_COLORS[entry.name] ?? '#78716c'} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`AED ${v.toLocaleString()} · ₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, '']} />
+                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, '']} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-1.5 mt-2">
@@ -311,8 +333,8 @@ export default function Analytics() {
                       <span className="text-muted">{t.name}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-primary font-medium">AED {t.value.toLocaleString()}</span>
-                      <span className="text-muted ml-1.5">≈ ₹{t.valueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                      <span className="text-primary font-medium">₹{t.valueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                      <span className="text-muted ml-1.5">≈ AED {t.value.toLocaleString()}</span>
                     </div>
                   </div>
                 ))}
@@ -328,9 +350,12 @@ export default function Analytics() {
           ) : (
             <ResponsiveContainer width="100%" height={Math.max(180, investmentComparison.length * 40)}>
               <BarChart data={investmentComparison} layout="vertical">
-                <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={90} />
-                <Tooltip formatter={(v: number, name: string) => [`AED ${v.toLocaleString()}`, name === 'invested' ? 'Invested' : 'Current Value']} />
+                <Tooltip formatter={(v: number, name: string, entry: any) => {
+                  const aed = name === 'invested' ? entry?.payload?.investedAed : entry?.payload?.currentAed;
+                  return [`₹${v.toLocaleString('en-IN')} · AED ${(aed ?? 0).toLocaleString()}`, name === 'invested' ? 'Invested' : 'Current Value'];
+                }} />
                 <Bar dataKey="invested" fill="#78716c" radius={[0, 4, 4, 0]} name="invested" />
                 <Bar dataKey="current" fill="#3b82f6" radius={[0, 4, 4, 0]} name="current" />
               </BarChart>
@@ -344,8 +369,8 @@ export default function Analytics() {
         <div className="card">
           <h2 className="text-sm font-semibold text-primary mb-1">This Month — by Category</h2>
           <div className="text-xs text-muted mb-4">
-            Total: AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
-          <span className="ml-2 text-[#6366F1]">≈ ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+            Total: ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+          <span className="ml-2 text-[#6366F1]">≈ AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</span>
           </div>
           {currentMonthCategoryData.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-muted text-sm">No expenses this month.</div>
@@ -358,7 +383,7 @@ export default function Analytics() {
                       <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] ?? '#78716c'} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`AED ${v.toLocaleString()} · ₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, '']} />
+                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, '']} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-1.5 mt-2">
@@ -369,8 +394,8 @@ export default function Analytics() {
                       <span className="text-muted">{cat.name}</span>
                     </div>
                     <div className="text-right">
-                      <span className="text-primary font-medium">AED {cat.value.toLocaleString()}</span>
-                      <span className="text-muted ml-1.5">≈ ₹{cat.valueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                      <span className="text-primary font-medium">₹{cat.valueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                      <span className="text-muted ml-1.5">≈ AED {cat.value.toLocaleString()}</span>
                     </div>
                   </div>
                 ))}
@@ -389,7 +414,7 @@ export default function Analytics() {
               <BarChart data={categoryData} layout="vertical">
                 <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={80} />
-                <Tooltip formatter={(v: number, _name: string, entry: any) => [`AED ${v.toLocaleString()} · ₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, 'Total']} />
+                <Tooltip formatter={(v: number, _name: string, entry: any) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, 'Total']} />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {categoryData.map(entry => (
                     <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] ?? '#78716c'} />

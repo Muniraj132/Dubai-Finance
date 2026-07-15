@@ -47,24 +47,39 @@ export default function Expenses() {
 
   const totalFiltered = filtered.reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0);
   const totalFilteredINR = filtered.reduce((s, e) => {
+    if (e.currency === 'INR') return s + e.amount;
     const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
     return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
   }, 0);
 
   // Spending warning for current month
   const currentMonth = getCurrentMonthKey();
-  const currentMonthRate = getMonthSalaryRate(currentMonth, salaryRateMap, aedToInrRate);
   const monthlyExpenses = useMemo(() =>
     expenses.filter(e => getMonthKey(e.date) === currentMonth)
       .reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0),
     [expenses, currentMonth, aedToInrRate]
+  );
+  const monthlyExpensesInr = useMemo(() =>
+    expenses.filter(e => getMonthKey(e.date) === currentMonth).reduce((s, e) => {
+      if (e.currency === 'INR') return s + e.amount;
+      const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
+      return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
+    }, 0),
+    [expenses, currentMonth, salaryRateMap, aedToInrRate]
   );
   const monthlyIncome = useMemo(() =>
     incomes.filter(i => getMonthKey(i.date) === currentMonth)
       .reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0),
     [incomes, currentMonth, aedToInrRate]
   );
-  const monthlyExpensesInr = useMemo(() => monthlyExpenses * currentMonthRate, [monthlyExpenses, currentMonthRate]);
+  const monthlyIncomeInr = useMemo(() =>
+    incomes.filter(i => getMonthKey(i.date) === currentMonth).reduce((s, i) => {
+      if (i.currency === 'INR') return s + i.amount;
+      const aed = resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate);
+      return s + aed * getMonthSalaryRate(getMonthKey(i.date), salaryRateMap, aedToInrRate);
+    }, 0),
+    [incomes, currentMonth, salaryRateMap, aedToInrRate]
+  );
   const spendingRatio = monthlyIncome > 0 ? monthlyExpenses / monthlyIncome : 0;
   const showOverBudget = filterMonth === currentMonth && monthlyIncome > 0 && spendingRatio >= 1;
   const showHighSpending = filterMonth === currentMonth && monthlyIncome > 0 && spendingRatio >= 0.8 && spendingRatio < 1;
@@ -100,7 +115,7 @@ export default function Expenses() {
     <div className="space-y-5">
       <PageHeader
         title="Expenses"
-        subtitle={`${filtered.length} transactions · AED ${totalFiltered.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · ₹${totalFilteredINR.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+        subtitle={`${filtered.length} transactions · ₹${totalFilteredINR.toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${totalFiltered.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
         action={<Button onClick={openAdd}><Plus size={16} /> Add Expense</Button>}
       />
 
@@ -111,7 +126,7 @@ export default function Expenses() {
           <div>
             <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income this month!</div>
             <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
-              Spent AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{monthlyExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {monthlyIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
+              Spent ₹{monthlyExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} (AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}) vs income ₹{monthlyIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
             </div>
           </div>
         </div>
@@ -122,7 +137,7 @@ export default function Expenses() {
           <div>
             <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
             <div className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
-              AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{monthlyExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(monthlyIncome - monthlyExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} remaining this month.
+              ₹{monthlyExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} spent (AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}). Only ₹{(monthlyIncomeInr - monthlyExpensesInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })} remaining this month.
             </div>
           </div>
         </div>

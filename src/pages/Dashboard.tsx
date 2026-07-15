@@ -21,10 +21,12 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
               <span className="text-primary capitalize">{p.name}:</span>
-              <span className="font-semibold text-primary">AED {p.value?.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</span>
+              <span className="font-semibold text-primary">
+                {typeof inrValue === 'number' ? `₹${inrValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : `AED ${p.value?.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+              </span>
             </div>
             {typeof inrValue === 'number' && (
-              <div className="text-xs text-muted ml-4">≈ ₹{inrValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+              <div className="text-xs text-muted ml-4">≈ AED {p.value?.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</div>
             )}
           </div>
         );
@@ -101,6 +103,7 @@ export default function Dashboard() {
   );
   const periodExpensesInr = useMemo(() =>
     filteredExpenses.reduce((sum, e) => {
+      if (e.currency === 'INR') return sum + e.amount;
       const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
       return sum + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
     }, 0),
@@ -113,6 +116,7 @@ export default function Dashboard() {
   );
   const periodIncomeInr = useMemo(() =>
     filteredIncomes.reduce((sum, i) => {
+      if (i.currency === 'INR') return sum + i.amount;
       const aed = resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate);
       return sum + aed * getMonthSalaryRate(getMonthKey(i.date), salaryRateMap, aedToInrRate);
     }, 0),
@@ -143,8 +147,8 @@ export default function Dashboard() {
   // Chit fund contributions — a pooled forced-savings scheme, not a living
   // expense (see computeChitCashFlow / docs/ARCHITECTURE.md §7.11).
   const periodChitCash = useMemo(() =>
-    computeChitCashFlow(filteredChitInstallments, aedToInrRate, salaryRateMap),
-    [filteredChitInstallments, aedToInrRate, salaryRateMap]
+    computeChitCashFlow(filteredChitInstallments, aedToInrRate),
+    [filteredChitInstallments, aedToInrRate]
   );
 
   const summary = useMemo(() => computeFinancialSummary({
@@ -176,11 +180,13 @@ export default function Dashboard() {
   const { netWorth, netWorthInr } = useMemo(() => {
     const allTimeIncome = incomes.reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate), 0);
     const allTimeIncomeInr = incomes.reduce((s, i) => {
+      if (i.currency === 'INR') return s + i.amount;
       const aed = resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate);
       return s + aed * getMonthSalaryRate(getMonthKey(i.date), salaryRateMap, aedToInrRate);
     }, 0);
     const allTimeExpenses = expenses.reduce((s, e) => s + resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate), 0);
     const allTimeExpensesInr = expenses.reduce((s, e) => {
+      if (e.currency === 'INR') return s + e.amount;
       const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
       return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
     }, 0);
@@ -225,9 +231,9 @@ export default function Dashboard() {
     const map = new Map<string, { value: number; valueInr: number }>();
     filteredExpenses.forEach(e => {
       const amt = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
-      const rate = getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
+      const inrAmt = e.currency === 'INR' ? e.amount : amt * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
       const prev = map.get(e.category) ?? { value: 0, valueInr: 0 };
-      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + amt * rate });
+      map.set(e.category, { value: prev.value + amt, valueInr: prev.valueInr + inrAmt });
     });
     return Array.from(map.entries()).map(([name, v]) => ({ name, value: Math.round(v.value), valueInr: Math.round(v.valueInr) }))
       .sort((a, b) => b.value - a.value);
@@ -253,7 +259,7 @@ export default function Dashboard() {
           <div>
             <div className="text-sm font-semibold text-red-700 dark:text-red-400">Living expenses exceed income {periodLabel}!</div>
             <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
-              Spent AED {periodExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} (₹{periodExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}) vs income AED {periodIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
+              Spent ₹{periodExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} (AED {periodExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}) vs income ₹{periodIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
             </div>
           </div>
         </div>
@@ -264,7 +270,7 @@ export default function Dashboard() {
           <div>
             <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
             <div className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
-              AED {periodExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })} spent (₹{periodExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}). Only AED {(periodIncome - periodExpenses).toLocaleString('en-AE', { maximumFractionDigits: 0 })} remaining {periodLabel}.
+              ₹{periodExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} spent (AED {periodExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}). Only ₹{(periodIncomeInr - periodExpensesInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })} remaining {periodLabel}.
             </div>
           </div>
         </div>
@@ -274,29 +280,29 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Income"
-          value={`AED ${summary.income.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(summary.incomeInr, 'INR')}`}
+          value={formatCurrency(summary.incomeInr, 'INR')}
+          sub={`≈ AED ${summary.income.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
           icon={<TrendingUp size={16} />}
           color="green"
         />
         <StatCard
           title="Living Expenses"
-          value={`AED ${summary.livingExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(summary.livingExpensesInr, 'INR')}`}
+          value={formatCurrency(summary.livingExpensesInr, 'INR')}
+          sub={`≈ AED ${summary.livingExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
           icon={<TrendingDown size={16} />}
           color="red"
         />
         <StatCard
           title="Investments"
-          value={`AED ${summary.investments.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(summary.investmentsInr, 'INR')} · stocks, funds, gold`}
+          value={formatCurrency(summary.investmentsInr, 'INR')}
+          sub={`≈ AED ${summary.investments.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · stocks, funds, gold`}
           icon={<LineChart size={16} />}
           color="blue"
         />
         <StatCard
           title="Cash Remaining"
-          value={`AED ${summary.cashRemaining.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(summary.cashRemainingInr, 'INR')}`}
+          value={formatCurrency(summary.cashRemainingInr, 'INR')}
+          sub={`≈ AED ${summary.cashRemaining.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
           icon={<Wallet size={16} />}
           color="cyan"
         />
@@ -306,22 +312,22 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Chit Contributions"
-          value={`AED ${summary.chitContributions.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(summary.chitContributionsInr, 'INR')} · pooled savings`}
+          value={formatCurrency(summary.chitContributionsInr, 'INR')}
+          sub={`≈ AED ${summary.chitContributions.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · pooled savings`}
           icon={<IndianRupee size={16} />}
           color="purple"
         />
         <StatCard
           title="Debt Paid Down"
-          value={`AED ${summary.debtPrincipalPaid.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(summary.debtPrincipalPaidInr, 'INR')} · +${formatCurrency(summary.debtInterest, 'AED')} interest`}
+          value={formatCurrency(summary.debtPrincipalPaidInr, 'INR')}
+          sub={`≈ AED ${summary.debtPrincipalPaid.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · +${formatCurrency(summary.debtInterestInr, 'INR')} interest`}
           icon={<HandCoins size={16} />}
           color="green"
         />
         <StatCard
           title="Total Saved"
-          value={`AED ${summary.totalSaved.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(summary.totalSavedInr, 'INR')} · investments + chits + debt paid + cash`}
+          value={formatCurrency(summary.totalSavedInr, 'INR')}
+          sub={`≈ AED ${summary.totalSaved.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · investments + chits + debt paid + cash`}
           icon={<PiggyBank size={16} />}
           color="cyan"
         />
@@ -338,8 +344,8 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatCard
           title="Net Worth"
-          value={`AED ${netWorth.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(netWorthInr, 'INR')} · cash + investments + gold + chits − liabilities`}
+          value={formatCurrency(netWorthInr, 'INR')}
+          sub={`≈ AED ${netWorth.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · cash + investments + gold + chits − liabilities`}
           icon={<Landmark size={16} />}
           color="blue"
         />
@@ -350,7 +356,7 @@ export default function Dashboard() {
         <ArrowRightLeft size={16} className="text-[#6366F1] shrink-0" />
         <span className="text-sm text-[#818CF8]">
           <span className="font-semibold">{!isAllTime && salaryRateMap.has(selectedMonth) ? "This Month's Salary Rate:" : 'Live Rate:'}</span> 1 AED = ₹{selectedMonthRate.toFixed(2)} INR &nbsp;·&nbsp;
-          AED {periodIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })} = ₹{periodIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+          ₹{periodIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} = AED {periodIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
         </span>
       </div>
 
@@ -396,7 +402,7 @@ export default function Dashboard() {
                       <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] ?? '#78716c'} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`AED ${v.toLocaleString()} · ₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`, '']} />
+                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, '']} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-2 mt-2">
@@ -407,8 +413,8 @@ export default function Dashboard() {
                       <span className="text-muted">{cat.name}</span>
                     </div>
                     <div className="text-right">
-                      <div className="text-primary font-medium">AED {cat.value.toLocaleString()}</div>
-                      <div className="text-muted">≈ ₹{cat.valueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                      <div className="text-primary font-medium">₹{cat.valueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                      <div className="text-muted">≈ AED {cat.value.toLocaleString()}</div>
                     </div>
                   </div>
                 ))}

@@ -84,7 +84,7 @@ export const computeMonthlyStats = (
     const s = monthMap.get(m)!;
     const aed = resolveAed(inc.amount, inc.currency, inc.amountAed, rate);
     s.income += aed;
-    s.incomeInr += aed * getMonthSalaryRate(m, rateMap, rate);
+    s.incomeInr += inc.currency === 'INR' ? inc.amount : aed * getMonthSalaryRate(m, rateMap, rate);
   });
 
   expenses.forEach(exp => {
@@ -93,7 +93,7 @@ export const computeMonthlyStats = (
     const s = monthMap.get(m)!;
     const aed = resolveAed(exp.amount, exp.currency, exp.amountAed, rate);
     s.expenses += aed;
-    s.expensesInr += aed * getMonthSalaryRate(m, rateMap, rate);
+    s.expensesInr += exp.currency === 'INR' ? exp.amount : aed * getMonthSalaryRate(m, rateMap, rate);
   });
 
   return Array.from(monthMap.values())
@@ -122,8 +122,9 @@ export const computeInvestmentCashFlow = (
   transactions.forEach(t => {
     const a = resolveAed(t.amount, t.currency, t.amountAed, rate);
     const sign = (t.type === 'Buy' || t.type === 'SIP') ? 1 : -1;
+    const inrValue = t.currency === 'INR' ? t.amount : a * getMonthSalaryRate(getMonthKey(t.date), salaryRateMap, rate);
     aed += sign * a;
-    inr += sign * a * getMonthSalaryRate(getMonthKey(t.date), salaryRateMap, rate);
+    inr += sign * inrValue;
   });
   return { aed, inr };
 };
@@ -141,7 +142,7 @@ export const computeGoldCashFlow = (
     const value = g.weightGrams * g.pricePerGram;
     const a = resolveAed(value, g.currency, g.totalValueAed, rate);
     aed += a;
-    inr += a * getMonthSalaryRate(getMonthKey(g.date), salaryRateMap, rate);
+    inr += g.currency === 'INR' ? value : a * getMonthSalaryRate(getMonthKey(g.date), salaryRateMap, rate);
   });
   return { aed, inr };
 };
@@ -149,20 +150,19 @@ export const computeGoldCashFlow = (
 // Cash paid into a chit fund pool this period — a forced-savings scheme,
 // not spending (see docs/ARCHITECTURE.md §7.6/§7.11). Chit amounts are
 // always INR-native in this app (chit_funds/chit_installments have no
-// currency column), so there's no resolveAed snapshot to read — just a
-// live conversion at the given rate, same as any other INR-native figure.
+// currency column) — `inr` is the exact rupee amount paid, never derived
+// via a round-trip through AED, so it never drifts from what was actually
+// paid. AED is the approximate/derived figure here, at the live rate.
 export const computeChitCashFlow = (
   installments: ChitInstallment[],
-  rate: number,
-  salaryRateMap: Map<string, number>
+  rate: number
 ): { aed: number; inr: number } => {
   let aed = 0, inr = 0;
   installments.forEach(i => {
     const paid = i.paid_amount ?? 0;
     if (!paid) return;
-    const a = convertToAED(paid, 'INR', rate);
-    aed += a;
-    inr += a * getMonthSalaryRate(getMonthKey(i.paid_date), salaryRateMap, rate);
+    aed += convertToAED(paid, 'INR', rate);
+    inr += paid;
   });
   return { aed, inr };
 };
@@ -413,13 +413,18 @@ export const computeDebtCashFlow = (
     const txnRate = t.exchangeRateUsed ?? rate;
     const interestRaw = t.interestAmount ?? 0;
     const principalRaw = t.amount - interestRaw;
-    const monthRate = getMonthSalaryRate(getMonthKey(t.date), salaryRateMap, rate);
     const pAed = convertToAED(principalRaw, t.currency, txnRate);
     const iAed = convertToAED(interestRaw, t.currency, txnRate);
     principalAed += pAed;
-    principalInr += pAed * monthRate;
     interestAed += iAed;
-    interestInr += iAed * monthRate;
+    if (t.currency === 'INR') {
+      principalInr += principalRaw;
+      interestInr += interestRaw;
+    } else {
+      const monthRate = getMonthSalaryRate(getMonthKey(t.date), salaryRateMap, rate);
+      principalInr += pAed * monthRate;
+      interestInr += iAed * monthRate;
+    }
   });
   return { principalAed, principalInr, interestAed, interestInr };
 };
@@ -561,9 +566,9 @@ export const getWelcomeInsight = (
     const aed = Math.round(currentStats.savings).toLocaleString('en-AE');
     const inr = Math.round(currentStats.savingsInr).toLocaleString('en-IN');
     const message = pickVariant([
-      `You've saved AED ${aed} (≈₹${inr}) so far this month. Keep it up!`,
-      `AED ${aed} saved this month already (≈₹${inr}) — nice discipline.`,
-      `You're AED ${aed} ahead this month (≈₹${inr}). Keep the streak going!`,
+      `You've saved ₹${inr} (≈AED ${aed}) so far this month. Keep it up!`,
+      `₹${inr} saved this month already (≈AED ${aed}) — nice discipline.`,
+      `You're ₹${inr} ahead this month (≈AED ${aed}). Keep the streak going!`,
     ], seed);
     return { emoji: '💰', message };
   }
@@ -571,11 +576,11 @@ export const getWelcomeInsight = (
   const pastPositive = [...monthlyStats].reverse().find(s => s.month !== currentMonth && s.savings > 0);
   if (pastPositive) {
     const label = getMonthLabel(pastPositive.month);
-    const aed = Math.round(pastPositive.savings).toLocaleString('en-AE');
+    const inr = Math.round(pastPositive.savingsInr).toLocaleString('en-IN');
     const message = pickVariant([
-      `In ${label} you saved AED ${aed} — great momentum to build on.`,
-      `${label} was a strong month: AED ${aed} saved. Let's keep that going.`,
-      `Looking back, ${label} added AED ${aed} to your savings.`,
+      `In ${label} you saved ₹${inr} — great momentum to build on.`,
+      `${label} was a strong month: ₹${inr} saved. Let's keep that going.`,
+      `Looking back, ${label} added ₹${inr} to your savings.`,
     ], seed);
     return { emoji: '📈', message };
   }
@@ -585,9 +590,9 @@ export const getWelcomeInsight = (
     const aed = Math.round(portfolioStats.gainAed).toLocaleString('en-AE');
     const inr = Math.round(portfolioStats.gainInr).toLocaleString('en-IN');
     const message = pickVariant([
-      `Your investments are up AED ${aed} (≈₹${inr}) overall.`,
-      `Portfolio update: up AED ${aed} (≈₹${inr}) since you started investing.`,
-      `Your investments have grown by AED ${aed} (≈₹${inr}) — steady progress.`,
+      `Your investments are up ₹${inr} (≈AED ${aed}) overall.`,
+      `Portfolio update: up ₹${inr} (≈AED ${aed}) since you started investing.`,
+      `Your investments have grown by ₹${inr} (≈AED ${aed}) — steady progress.`,
     ], seed);
     return { emoji: '📊', message };
   }

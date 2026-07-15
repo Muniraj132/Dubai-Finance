@@ -322,29 +322,29 @@ export default function Investments() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title="Total Invested"
-              value={`AED ${portfolioStats.investedAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-              sub={`≈ ${formatCurrency(portfolioStats.investedInr, 'INR')}`}
+              value={formatCurrency(portfolioStats.investedInr, 'INR')}
+              sub={`≈ AED ${portfolioStats.investedAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
               icon={<Wallet size={16} />}
               color="theme"
             />
             <StatCard
               title="Current Value"
-              value={`AED ${portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-              sub={`≈ ${formatCurrency(portfolioStats.currentValueInr, 'INR')}`}
+              value={formatCurrency(portfolioStats.currentValueInr, 'INR')}
+              sub={`≈ AED ${portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
               icon={<LineChart size={16} />}
               color="blue"
             />
             <StatCard
               title="Gain / Loss"
-              value={`${portfolioStats.gainAed >= 0 ? '+' : ''}AED ${portfolioStats.gainAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-              sub={`${portfolioStats.gainPct >= 0 ? '+' : ''}${portfolioStats.gainPct.toFixed(1)}%`}
+              value={`${portfolioStats.gainInr >= 0 ? '+' : ''}${formatCurrency(portfolioStats.gainInr, 'INR')}`}
+              sub={`≈ AED ${portfolioStats.gainAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · ${portfolioStats.gainPct >= 0 ? '+' : ''}${portfolioStats.gainPct.toFixed(1)}%`}
               icon={portfolioStats.gainAed >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
               color={portfolioStats.gainAed >= 0 ? 'green' : 'red'}
             />
             <StatCard
               title="Dividends Received"
-              value={`AED ${portfolioStats.dividendsAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-              sub={`≈ ${formatCurrency(portfolioStats.dividendsInr, 'INR')}`}
+              value={formatCurrency(portfolioStats.dividendsInr, 'INR')}
+              sub={`≈ AED ${portfolioStats.dividendsAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
               icon={<Coins size={16} />}
               color="amber"
             />

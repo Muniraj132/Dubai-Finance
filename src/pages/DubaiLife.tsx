@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Palmtree, Calendar, TrendingUp, PiggyBank, Gem, Heart, LineChart } from 'lucide-react';
 import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useInvestmentTransactions, useSettings } from '../stores/useAppStore';
 import { PageHeader, StatCard } from '../components/ui';
-import { resolveAed, formatCurrency, computePortfolioStats, EXPENSE_CATEGORIES, getMonthKey, getMonthSalaryRate } from '../utils';
+import { resolveAed, resolveInr, formatCurrency, computePortfolioStats, EXPENSE_CATEGORIES, getMonthKey, getMonthSalaryRate } from '../utils';
 import { useSalaryRateMap } from '../hooks';
 
 export default function DubaiLife() {
@@ -31,6 +31,7 @@ export default function DubaiLife() {
   );
   const totalEarningsInr = useMemo(() =>
     incomes.reduce((s, i) => {
+      if (i.currency === 'INR') return s + i.amount;
       const aed = resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate);
       return s + aed * getMonthSalaryRate(getMonthKey(i.date), salaryRateMap, aedToInrRate);
     }, 0),
@@ -43,6 +44,7 @@ export default function DubaiLife() {
   );
   const totalExpensesInr = useMemo(() =>
     expenses.reduce((s, e) => {
+      if (e.currency === 'INR') return s + e.amount;
       const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
       return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
     }, 0),
@@ -64,6 +66,13 @@ export default function DubaiLife() {
     }, 0),
     [goldPurchases, aedToInrRate]
   );
+  const totalGoldValueInr = useMemo(() =>
+    goldPurchases.reduce((s, g) => {
+      const val = g.weightGrams * g.pricePerGram;
+      return s + resolveInr(val, g.currency, g.totalValueInr, aedToInrRate);
+    }, 0),
+    [goldPurchases, aedToInrRate]
+  );
 
   const portfolioStats = useMemo(
     () => computePortfolioStats(investments, investmentTransactions, aedToInrRate),
@@ -78,6 +87,7 @@ export default function DubaiLife() {
   const familySupportInr = useMemo(() =>
     expenses.filter(e => e.category === 'Family Support')
       .reduce((s, e) => {
+        if (e.currency === 'INR') return s + e.amount;
         const aed = resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate);
         return s + aed * getMonthSalaryRate(getMonthKey(e.date), salaryRateMap, aedToInrRate);
       }, 0),
@@ -120,36 +130,36 @@ export default function DubaiLife() {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Total Earnings"
-          value={`AED ${totalEarnings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(totalEarningsInr, 'INR')}`}
+          value={formatCurrency(totalEarningsInr, 'INR')}
+          sub={`≈ AED ${totalEarnings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
           icon={<TrendingUp size={16} />}
           color="green"
         />
         <StatCard
           title="Total Saved"
-          value={`AED ${totalSavings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`${savingsRate.toFixed(1)}% savings rate · investments + cash`}
+          value={formatCurrency(totalSavingsInr, 'INR')}
+          sub={`≈ AED ${totalSavings.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · ${savingsRate.toFixed(1)}%`}
           icon={<PiggyBank size={16} />}
           color="cyan"
         />
         <StatCard
           title="Gold Purchased"
           value={`${totalGoldGrams.toFixed(4)} g`}
-          sub={`AED ${totalGoldValue.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={`≈ ${formatCurrency(totalGoldValueInr, 'INR')} · AED ${totalGoldValue.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
           icon={<Gem size={16} />}
           color="yellow"
         />
         <StatCard
           title="Investments"
-          value={`AED ${portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`${portfolioStats.gainPct >= 0 ? '+' : ''}${portfolioStats.gainPct.toFixed(1)}% gain/loss`}
+          value={formatCurrency(portfolioStats.currentValueInr, 'INR')}
+          sub={`≈ AED ${portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · ${portfolioStats.gainPct >= 0 ? '+' : ''}${portfolioStats.gainPct.toFixed(1)}%`}
           icon={<LineChart size={16} />}
           color="purple"
         />
         <StatCard
           title="Family Support"
-          value={`AED ${familySupport.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
-          sub={`≈ ${formatCurrency(familySupportInr, 'INR')}`}
+          value={formatCurrency(familySupportInr, 'INR')}
+          sub={`≈ AED ${familySupport.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
           icon={<Heart size={16} />}
           color="pink"
         />
@@ -159,13 +169,13 @@ export default function DubaiLife() {
       <div className="grid grid-cols-2 gap-4">
         <div className="card text-center">
           <div className="text-xs text-muted mb-1">Daily Earning (avg)</div>
-          <div className="text-xl font-bold text-green-400">AED {dailyEarning.toFixed(0)}</div>
-          <div className="text-xs text-muted">≈ ₹{dailyEarningInr.toFixed(0)}/day</div>
+          <div className="text-xl font-bold text-green-400">₹{dailyEarningInr.toFixed(0)}/day</div>
+          <div className="text-xs text-muted">≈ AED {dailyEarning.toFixed(0)}</div>
         </div>
         <div className="card text-center">
           <div className="text-xs text-muted mb-1">Daily Saving (avg)</div>
-          <div className={`text-xl font-bold ${dailySaving >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>AED {dailySaving.toFixed(0)}</div>
-          <div className="text-xs text-muted">≈ ₹{dailySavingInr.toFixed(0)}/day</div>
+          <div className={`text-xl font-bold ${dailySaving >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>₹{dailySavingInr.toFixed(0)}/day</div>
+          <div className="text-xs text-muted">≈ AED {dailySaving.toFixed(0)}</div>
         </div>
       </div>
 
