@@ -23,6 +23,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   rateFetchedAt: null,
 };
 
+export interface Toast {
+  id: string;
+  message: string;
+  type: 'success' | 'error';
+}
+
 interface AppState {
   expenses: Expense[];
   incomes: Income[];
@@ -38,11 +44,11 @@ interface AppState {
   settings: AppSettings;
   isLoading: boolean;
   rateJustUpdated: boolean;
-  lastError: string | null;
+  toasts: Toast[];
 
   initialize: () => Promise<void>;
   setRateJustUpdated: (v: boolean) => void;
-  clearError: () => void;
+  dismissToast: (id: string) => void;
   reset: () => void;
 
   addExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => Promise<void>;
@@ -92,10 +98,19 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>()((set, get) => {
+  // Surfaces a dismissible toast (see ToastContainer in Layout.tsx) for a
+  // limited time — success toasts clear faster since there's nothing the
+  // user needs to act on, errors stay up longer so they're not missed.
+  const pushToast = (message: string, type: Toast['type']) => {
+    const id = generateId();
+    set({ toasts: [...get().toasts, { id, message, type }] });
+    setTimeout(() => get().dismissToast(id), type === 'error' ? 6000 : 3000);
+  };
+
   // Every mutating action applies `optimisticValue` immediately, then fires the
   // Supabase call. If it fails, the optimistic change is rolled back to `prev`
-  // and lastError is set (surfaced by the banner in Layout.tsx) instead of
-  // silently leaving local state out of sync with the database.
+  // and an error toast is shown; on success, a confirmation toast is shown —
+  // either way the user knows what happened instead of silently guessing.
   const writeThrough = async <K extends keyof AppState>(
     key: K,
     optimisticValue: AppState[K],
@@ -105,7 +120,10 @@ export const useAppStore = create<AppState>()((set, get) => {
     set({ [key]: optimisticValue } as Partial<AppState>);
     const { error } = await call();
     if (error) {
-      set({ [key]: prev, lastError: 'Failed to save your change. Please try again.' } as Partial<AppState>);
+      set({ [key]: prev } as Partial<AppState>);
+      pushToast('Failed to save your change. Please try again.', 'error');
+    } else {
+      pushToast('Saved', 'success');
     }
   };
 
@@ -124,10 +142,10 @@ export const useAppStore = create<AppState>()((set, get) => {
     settings: DEFAULT_SETTINGS,
     isLoading: false,
     rateJustUpdated: false,
-    lastError: null,
+    toasts: [],
 
     setRateJustUpdated: (v) => set({ rateJustUpdated: v }),
-    clearError: () => set({ lastError: null }),
+    dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 
     initialize: async () => {
       set({ isLoading: true });
@@ -175,7 +193,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       liabilities: [],
       liabilityTransactions: [],
       settings: DEFAULT_SETTINGS,
-      lastError: null,
+      toasts: [],
     }),
 
     addExpense: async (expense) => {
@@ -550,6 +568,7 @@ export const useAppStore = create<AppState>()((set, get) => {
   };
 });
 
+export const useToasts = () => useAppStore((s) => s.toasts);
 export const useSettings = () => useAppStore((s) => s.settings);
 export const useExpenses = () => useAppStore((s) => s.expenses);
 export const useIncomes = () => useAppStore((s) => s.incomes);
