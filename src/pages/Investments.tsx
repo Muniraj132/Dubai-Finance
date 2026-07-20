@@ -76,6 +76,7 @@ export default function Investments() {
   const {
     addInvestment, updateInvestment, deleteInvestment,
     addInvestmentTransaction, updateInvestmentTransaction, deleteInvestmentTransaction,
+    pushToast,
   } = useAppStore();
   const investments = useInvestments();
   const transactions = useInvestmentTransactions();
@@ -206,8 +207,11 @@ export default function Investments() {
   // (see docs/ARCHITECTURE.md §7.10) — no live feed exists for Stock/ETF/
   // FD/PPF/NPS, so this only ever applies to Mutual Fund holdings that have
   // been explicitly linked to a scheme code.
+  // Updates the store silently — refreshing NAVs is a background sync, not a
+  // form submit, so a single item's success/failure isn't worth its own toast.
+  // Callers below report one consolidated toast for the whole refresh instead.
   const refreshNav = async (inv: Investment) => {
-    if (!inv.schemeCode) return;
+    if (!inv.schemeCode) return false;
     setRefreshingId(inv.id);
     try {
       const latest = await fetchLatestNav(inv.schemeCode);
@@ -215,11 +219,18 @@ export default function Investments() {
       if (latest && totalUnits > 0) {
         const valueInr = totalUnits * latest.nav;
         const currentValue = inv.currency === 'INR' ? valueInr : convertToAED(valueInr, 'INR', aedToInrRate);
-        await updateInvestment(inv.id, { currentValue });
+        await updateInvestment(inv.id, { currentValue }, { silent: true });
+        return true;
       }
+      return false;
     } finally {
       setRefreshingId(null);
     }
+  };
+
+  const refreshNavWithToast = async (inv: Investment) => {
+    const ok = await refreshNav(inv);
+    pushToast(ok ? 'NAV updated' : 'No live price available for this fund', ok ? 'success' : 'error');
   };
 
   const linkedMfInvestments = investments.filter(i => i.type === 'Mutual Fund' && i.schemeCode);
@@ -227,7 +238,11 @@ export default function Investments() {
   const refreshAllNavs = async () => {
     setRefreshingAll(true);
     try {
-      await Promise.all(linkedMfInvestments.map(inv => refreshNav(inv)));
+      const results = await Promise.all(linkedMfInvestments.map(inv => refreshNav(inv)));
+      const updated = results.filter(Boolean).length;
+      if (updated === results.length) pushToast(`Refreshed ${updated} NAV${updated === 1 ? '' : 's'}`, 'success');
+      else if (updated === 0) pushToast('Could not refresh any NAVs', 'error');
+      else pushToast(`Refreshed ${updated} of ${results.length} NAVs`, 'success');
     } finally {
       setRefreshingAll(false);
     }
@@ -452,7 +467,7 @@ export default function Investments() {
               {selectedInvestment.type === 'Mutual Fund' && selectedInvestment.schemeCode && (
                 <Button
                   variant="secondary"
-                  onClick={() => refreshNav(selectedInvestment)}
+                  onClick={() => refreshNavWithToast(selectedInvestment)}
                   disabled={refreshingId === selectedInvestment.id}
                 >
                   <RefreshCw size={16} className={refreshingId === selectedInvestment.id ? 'animate-spin' : ''} /> Refresh NAV
