@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAppStore, useSettings } from '../stores/useAppStore';
 import { PageHeader, FormField, Input, Button } from '../components/ui';
 
@@ -9,14 +9,21 @@ export default function Settings () {
   const [rate, setRate] = useState(settings.aedToInrRate.toString());
   const [arrivalDate, setArrivalDate] = useState(settings.dubaiArrivalDate);
 
-  // Sync local state when the store finishes loading from Supabase after a page refresh
-  useEffect(() => {
+  // Keep the form in sync when the store finishes loading from Supabase after a
+  // page refresh. Adjusting state during render (rather than in an effect) avoids
+  // an extra render pass — see https://react.dev/learn/you-might-not-need-an-effect
+  const [prevAedToInrRate, setPrevAedToInrRate] = useState(settings.aedToInrRate);
+  if (settings.aedToInrRate !== prevAedToInrRate) {
+    setPrevAedToInrRate(settings.aedToInrRate);
     setRate(settings.aedToInrRate.toString());
-  }, [settings.aedToInrRate]);
+  }
 
-  useEffect(() => {
+  const [prevDubaiArrivalDate, setPrevDubaiArrivalDate] = useState(settings.dubaiArrivalDate);
+  if (settings.dubaiArrivalDate !== prevDubaiArrivalDate) {
+    setPrevDubaiArrivalDate(settings.dubaiArrivalDate);
     setArrivalDate(settings.dubaiArrivalDate);
-  }, [settings.dubaiArrivalDate]);
+  }
+
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {

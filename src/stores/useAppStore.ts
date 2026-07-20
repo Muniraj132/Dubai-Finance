@@ -114,7 +114,7 @@ export const useAppStore = create<AppState>()((set, get) => {
   const writeThrough = async <K extends keyof AppState>(
     key: K,
     optimisticValue: AppState[K],
-    call: () => PromiseLike<{ error: any }>
+    call: () => PromiseLike<{ error: unknown }>
   ) => {
     const prev = get()[key];
     set({ [key]: optimisticValue } as Partial<AppState>);

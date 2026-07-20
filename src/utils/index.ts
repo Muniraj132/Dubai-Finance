@@ -259,7 +259,7 @@ export const computeNetWorth = (inputs: NetWorthInputs): { netWorth: number; net
   };
 };
 
-export const exportToCSV = (data: Record<string, any>[], filename: string) => {
+export const exportToCSV = (data: Record<string, string | number | boolean | null | undefined>[], filename: string) => {
   if (!data.length) return;
   const headers = Object.keys(data[0]);
   const rows = data.map(row => headers.map(h => `"${row[h] ?? ''}"`).join(','));

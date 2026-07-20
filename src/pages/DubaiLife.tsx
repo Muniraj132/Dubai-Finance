@@ -21,6 +21,9 @@ export default function DubaiLife() {
 
   const daysInDubai = useMemo(() => {
     if (!dubaiArrivalDate) return 0;
+    // Wall-clock "days since arrival" — recomputing per render is intentional,
+    // not reactive state that needs to tick on its own.
+    // eslint-disable-next-line react-hooks/purity
     const diff = Date.now() - new Date(dubaiArrivalDate).getTime();
     return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
   }, [dubaiArrivalDate]);
