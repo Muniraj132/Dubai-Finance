@@ -9,12 +9,20 @@ import {
 import { useSalaryRateMap } from '../hooks';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+type TooltipPayloadItem = {
+  name: string;
+  value: number | string;
+  color: string;
+  dataKey: string;
+  payload?: Record<string, number | string>;
+};
+
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadItem[]; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-card-border rounded-xl px-4 py-3 shadow-xl text-sm">
       <div className="text-muted mb-2">{label}</div>
-      {payload.map((p: any) => {
+      {payload.map((p) => {
         const inrValue = p.payload?.[`${p.dataKey}Inr`];
         return (
           <div key={p.name} className="mb-1">
@@ -371,7 +379,7 @@ export default function Dashboard() {
               <BarChart data={chartData} barGap={4}>
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={50} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-                <Tooltip content={<CustomTooltip aedToInrRate={aedToInrRate} />} />
+                <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="income" fill="#22c55e" radius={[4, 4, 0, 0]} name="income" />
                 <Bar dataKey="expenses" fill="#ef4444" radius={[4, 4, 0, 0]} name="expenses" />
                 <Bar dataKey="savings" fill="#06b6d4" radius={[4, 4, 0, 0]} name="savings" />
@@ -402,7 +410,7 @@ export default function Dashboard() {
                       <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] ?? '#78716c'} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, '']} />
+                  <Tooltip formatter={(v: number, _name: string, entry: { payload?: { valueInr?: number } }) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, '']} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-2 mt-2">

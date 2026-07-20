@@ -137,7 +137,7 @@ export default function Investments() {
 
   // Debounced AMFI scheme search as the user types in the "link a fund" field.
   useEffect(() => {
-    if (schemeQuery.trim().length < 3) { setSchemeResults([]); return; }
+    if (schemeQuery.trim().length < 3) return;
     const t = setTimeout(async () => {
       const results = await searchMfSchemes(schemeQuery);
       setSchemeResults(results.slice(0, 8));
@@ -591,7 +591,7 @@ export default function Investments() {
                     onChange={e => setSchemeQuery(e.target.value)}
                     placeholder="Search fund name, e.g. HDFC Flexicap"
                   />
-                  {schemeResults.length > 0 && (
+                  {schemeQuery.trim().length >= 3 && schemeResults.length > 0 && (
                     <div className="absolute z-10 mt-1 w-full max-h-52 overflow-y-auto bg-card border border-card-border rounded-lg shadow-xl">
                       {schemeResults.map(r => (
                         <button

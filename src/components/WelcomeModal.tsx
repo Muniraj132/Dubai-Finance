@@ -29,6 +29,9 @@ export default function WelcomeModal() {
     if (localStorage.getItem(STORAGE_KEY) === today) return;
     localStorage.setItem(STORAGE_KEY, today);
 
+    // One-time sync with an external system (localStorage) gated on async data
+    // load completing, not derived state — safe to set directly here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setInsight(getWelcomeInsight(expenses, incomes, investments, investmentTransactions, settings));
   }, [isLoading, expenses, incomes, investments, investmentTransactions, settings]);
 

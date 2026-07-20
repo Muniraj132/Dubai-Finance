@@ -12,12 +12,20 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from 'recharts';
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+type TooltipPayloadItem = {
+  name: string;
+  value: number | string;
+  color: string;
+  dataKey: string;
+  payload?: Record<string, number | string>;
+};
+
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadItem[]; label?: string }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-card-border rounded-xl px-4 py-3 shadow-xl text-xs">
       <div className="text-muted mb-1.5">{label}</div>
-      {payload.map((p: any) => {
+      {payload.map((p) => {
         const inrValue = p.payload?.[`${p.dataKey}Inr`];
         return (
           <div key={p.name} className="mb-1">
@@ -322,7 +330,7 @@ export default function Analytics() {
                       <Cell key={entry.name} fill={INVESTMENT_TYPE_COLORS[entry.name] ?? '#78716c'} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, '']} />
+                  <Tooltip formatter={(v: number, _name: string, entry: { payload?: { valueInr?: number } }) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, '']} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-1.5 mt-2">
@@ -352,7 +360,7 @@ export default function Analytics() {
               <BarChart data={investmentComparison} layout="vertical">
                 <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={90} />
-                <Tooltip formatter={(v: number, name: string, entry: any) => {
+                <Tooltip formatter={(v: number, name: string, entry: { payload?: { investedAed?: number; currentAed?: number } }) => {
                   const aed = name === 'invested' ? entry?.payload?.investedAed : entry?.payload?.currentAed;
                   return [`₹${v.toLocaleString('en-IN')} · AED ${(aed ?? 0).toLocaleString()}`, name === 'invested' ? 'Invested' : 'Current Value'];
                 }} />
@@ -383,7 +391,7 @@ export default function Analytics() {
                       <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] ?? '#78716c'} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number, _name: string, entry: any) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, '']} />
+                  <Tooltip formatter={(v: number, _name: string, entry: { payload?: { valueInr?: number } }) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, '']} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-1.5 mt-2">
@@ -414,7 +422,7 @@ export default function Analytics() {
               <BarChart data={categoryData} layout="vertical">
                 <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={80} />
-                <Tooltip formatter={(v: number, _name: string, entry: any) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, 'Total']} />
+                <Tooltip formatter={(v: number, _name: string, entry: { payload?: { valueInr?: number } }) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, 'Total']} />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {categoryData.map(entry => (
                     <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] ?? '#78716c'} />
