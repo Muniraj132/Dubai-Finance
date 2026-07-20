@@ -48,6 +48,7 @@ interface AppState {
 
   initialize: () => Promise<void>;
   setRateJustUpdated: (v: boolean) => void;
+  pushToast: (message: string, type: Toast['type']) => void;
   dismissToast: (id: string) => void;
   reset: () => void;
 
@@ -79,7 +80,7 @@ interface AppState {
   deleteChitInstallment: (id: string) => Promise<void>;
 
   addInvestment: (investment: Omit<Investment, 'id' | 'createdAt'>) => Promise<void>;
-  updateInvestment: (id: string, investment: Partial<Investment>) => Promise<void>;
+  updateInvestment: (id: string, investment: Partial<Investment>, opts?: { silent?: boolean }) => Promise<void>;
   deleteInvestment: (id: string) => Promise<void>;
 
   addInvestmentTransaction: (txn: Omit<InvestmentTransaction, 'id' | 'createdAt'>) => Promise<void>;
@@ -111,18 +112,22 @@ export const useAppStore = create<AppState>()((set, get) => {
   // Supabase call. If it fails, the optimistic change is rolled back to `prev`
   // and an error toast is shown; on success, a confirmation toast is shown —
   // either way the user knows what happened instead of silently guessing.
+  // `silent` skips the per-call toast for actions that fan out into many
+  // writeThroughs at once (e.g. refreshing every linked fund's NAV) — the
+  // caller shows one consolidated toast instead of one per item.
   const writeThrough = async <K extends keyof AppState>(
     key: K,
     optimisticValue: AppState[K],
-    call: () => PromiseLike<{ error: unknown }>
+    call: () => PromiseLike<{ error: unknown }>,
+    opts?: { silent?: boolean }
   ) => {
     const prev = get()[key];
     set({ [key]: optimisticValue } as Partial<AppState>);
     const { error } = await call();
     if (error) {
       set({ [key]: prev } as Partial<AppState>);
-      pushToast('Failed to save your change. Please try again.', 'error');
-    } else {
+      if (!opts?.silent) pushToast('Failed to save your change. Please try again.', 'error');
+    } else if (!opts?.silent) {
       pushToast('Saved', 'success');
     }
   };
@@ -145,6 +150,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     toasts: [],
 
     setRateJustUpdated: (v) => set({ rateJustUpdated: v }),
+    pushToast,
     dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 
     initialize: async () => {
@@ -428,7 +434,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         supabase.from('investments').insert({ ...newInvestment, user_id: uid })
       );
     },
-    updateInvestment: async (id, patch) => {
+    updateInvestment: async (id, patch, opts) => {
       const existing = get().investments.find((i) => i.id === id);
       let extra: Partial<Investment> = {};
       if (existing && (patch.currentValue !== undefined || patch.currency !== undefined)) {
@@ -443,7 +449,8 @@ export const useAppStore = create<AppState>()((set, get) => {
       }
       const fullPatch = { ...patch, ...extra };
       await writeThrough('investments', get().investments.map((i) => (i.id === id ? { ...i, ...fullPatch } : i)), () =>
-        supabase.from('investments').update(fullPatch).eq('id', id)
+        supabase.from('investments').update(fullPatch).eq('id', id),
+        opts
       );
     },
     deleteInvestment: async (id) => {
