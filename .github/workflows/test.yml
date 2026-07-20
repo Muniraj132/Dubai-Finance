@@ -1,0 +1,41 @@
+name: React CI - Pre-Deployment Tests
+
+# Trigger the workflow on pushes or pull requests to main/master
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Download your repository code into the runner
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Node.js version
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm' # Caches dependencies so future runs are faster!
+
+      # Step 3: Install clean dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # Step 4: Run Linter (checks for code formatting / errors)
+      - name: Run Linter
+        run: npm run lint
+        continue-on-error: false # Fails the workflow if lint errors exist
+
+      # Step 5: Run Automated Tests
+      - name: Run Tests
+        run: npm test
+
+      # Step 6: Verify Production Build
+      - name: Test Production Build
+        run: npm run build
