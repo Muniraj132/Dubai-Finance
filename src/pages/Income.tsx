@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Edit2, Trash2, TrendingUp, CircleCheck } from 'lucide-react';
+import { Plus, Edit2, Trash2, TrendingUp, CircleCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAppStore, useIncomes, useSettings } from '../stores/useAppStore';
 import { Income, IncomeSource, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState } from '../components/ui';
@@ -27,6 +27,7 @@ export default function IncomePage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState(defaultForm());
   const [filterMonth, setFilterMonth] = useState(getCurrentMonthKey());
+  const [page, setPage] = useState(1);
 
   const months = useMonthOptions(incomes);
 
@@ -37,6 +38,11 @@ export default function IncomePage() {
 
   const total = filtered.reduce((s, i) => s + resolveAed(i.amount, i.currency, i.amountAed, settings.aedToInrRate), 0);
   const totalInr = filtered.reduce((s, i) => s + resolveInr(i.amount, i.currency, i.amountInr, settings.aedToInrRate), 0);
+
+  const PAGE_SIZE = 15;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const openAdd = () => { setForm({ ...defaultForm(), exchangeRateUsed: settings.aedToInrRate }); setEditId(null); setModalOpen(true); };
   const openEdit = (inc: Income) => {
@@ -78,7 +84,7 @@ export default function IncomePage() {
                 </div>
       </div>
       <div className="flex justify-end">
-        <Select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-40">
+        <Select value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setPage(1); }} className="w-40">
           <option value="all">All Months</option>
           {months.map(m => <option key={m} value={m}>{m}</option>)}
         </Select>
@@ -100,7 +106,7 @@ export default function IncomePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-card-border">
-              {filtered.map(inc => (
+              {paginated.map(inc => (
                 <tr key={inc.id} className="hover:bg-white/3 transition-colors group">
                   <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{formatDate(inc.date)}</td>
                   <td className="px-4 py-3">
@@ -132,6 +138,30 @@ export default function IncomePage() {
               ))}
             </tbody>
           </table>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-card-border text-xs text-muted">
+              <span>
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-lg border border-card-border text-muted hover:text-primary hover:bg-white/5 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-primary font-medium">{currentPage} / {totalPages}</span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-lg border border-card-border text-muted hover:text-primary hover:bg-white/5 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

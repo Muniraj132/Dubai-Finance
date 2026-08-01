@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Edit2, Trash2, Filter, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Filter, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAppStore, useExpenses, useSettings, useIncomes } from '../stores/useAppStore';
 import { Expense, ExpenseCategory, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState, Badge } from '../components/ui';
@@ -28,6 +28,7 @@ export default function Expenses() {
   const [search, setSearch] = useState('');
   const [filterMonth, setFilterMonth] = useState(getCurrentMonthKey());
   const [filterCategory, setFilterCategory] = useState<string>('All');
+  const [page, setPage] = useState(1);
 
   const months = useMonthOptions(expenses);
 
@@ -39,6 +40,11 @@ export default function Expenses() {
       return matchMonth && matchCat && matchSearch;
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [expenses, filterMonth, filterCategory, search]);
+
+  const PAGE_SIZE = 15;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // Every AED figure is valued at that transaction's month's salary
   // conversion rate (see buildSalaryRateMap in utils), not its own
@@ -147,13 +153,13 @@ export default function Expenses() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <Input placeholder="Search expenses..." value={search} onChange={e => setSearch(e.target.value)} className="pl-8" />
+          <Input placeholder="Search expenses..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="pl-8" />
         </div>
-        <Select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-full sm:w-40">
+        <Select value={filterMonth} onChange={e => { setFilterMonth(e.target.value); setPage(1); }} className="w-full sm:w-40">
           <option value="all">All Months</option>
           {months.map(m => <option key={m} value={m}>{m}</option>)}
         </Select>
-        <Select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="w-full sm:w-40">
+        <Select value={filterCategory} onChange={e => { setFilterCategory(e.target.value); setPage(1); }} className="w-full sm:w-40">
           <option value="All">All Categories</option>
           {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </Select>
@@ -176,7 +182,7 @@ export default function Expenses() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-card-border">
-                {filtered.map(exp => {
+                {paginated.map(exp => {
                   const expMonthRate = getMonthSalaryRate(getMonthKey(exp.date), salaryRateMap, aedToInrRate);
                   const inAED = exp.currency === 'AED' ? exp.amount : exp.amount / expMonthRate;
                   const inINR = exp.currency === 'AED' ? exp.amount * expMonthRate : exp.amount;
@@ -219,6 +225,30 @@ export default function Expenses() {
               </tbody>
             </table>
           </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-card-border text-xs text-muted">
+              <span>
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-lg border border-card-border text-muted hover:text-primary hover:bg-white/5 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-primary font-medium">{currentPage} / {totalPages}</span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-lg border border-card-border text-muted hover:text-primary hover:bg-white/5 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
