@@ -92,6 +92,14 @@ export default function Liabilities() {
 
   const txnsByLiabilityId = useMemo(() => groupByLiabilityId(transactions), [transactions]);
 
+  // Active (pending) liabilities surface before paid-off ones — sort is
+  // stable, so within each status group the existing createdAt-desc order
+  // from the store fetch is preserved.
+  const sortedLiabilities = useMemo(
+    () => [...liabilities].sort((a, b) => (a.status === b.status ? 0 : a.status === 'active' ? -1 : 1)),
+    [liabilities],
+  );
+
   const statsFor = (l: Liability) => computeLiabilityStats(l, txnsByLiabilityId.get(l.id) ?? [], aedToInrRate);
 
   const detailStats = selectedLiability ? statsFor(selectedLiability) : null;
@@ -240,7 +248,7 @@ export default function Liabilities() {
             <EmptyState icon={<Scale size={40} />} title="No liabilities tracked" description="Add a loan, credit card, or other debt to see a true Net Worth." />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {liabilities.map(l => {
+              {sortedLiabilities.map(l => {
                 const s = statsFor(l);
                 return (
                   <div key={l.id} className="card group flex flex-col gap-3">
