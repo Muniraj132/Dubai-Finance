@@ -546,8 +546,9 @@ export const getWelcomeInsight = (
 ): WelcomeInsight => {
   const rate = settings.aedToInrRate;
   const seed = dayOfYear(new Date());
+  const isDubai = settings.accountType !== 'india';
 
-  if (settings.dubaiArrivalDate) {
+  if (isDubai && settings.dubaiArrivalDate) {
     const days = Math.max(0, Math.floor((Date.now() - new Date(settings.dubaiArrivalDate).getTime()) / 86400000));
     if (days > 0 && days % 100 === 0) {
       const message = pickVariant([
@@ -563,12 +564,12 @@ export const getWelcomeInsight = (
   const currentMonth = getCurrentMonthKey();
   const currentStats = monthlyStats.find(s => s.month === currentMonth);
   if (currentStats && currentStats.savings > 0) {
-    const aed = Math.round(currentStats.savings).toLocaleString('en-AE');
+    const aed = isDubai ? ` (≈AED ${Math.round(currentStats.savings).toLocaleString('en-AE')})` : '';
     const inr = Math.round(currentStats.savingsInr).toLocaleString('en-IN');
     const message = pickVariant([
-      `You've saved ₹${inr} (≈AED ${aed}) so far this month. Keep it up!`,
-      `₹${inr} saved this month already (≈AED ${aed}) — nice discipline.`,
-      `You're ₹${inr} ahead this month (≈AED ${aed}). Keep the streak going!`,
+      `You've saved ₹${inr}${aed} so far this month. Keep it up!`,
+      `₹${inr} saved this month already${aed} — nice discipline.`,
+      `You're ₹${inr} ahead this month${aed}. Keep the streak going!`,
     ], seed);
     return { emoji: '💰', message };
   }
@@ -587,12 +588,12 @@ export const getWelcomeInsight = (
 
   const portfolioStats = computePortfolioStats(investments, investmentTransactions, rate);
   if (portfolioStats.gainAed > 0) {
-    const aed = Math.round(portfolioStats.gainAed).toLocaleString('en-AE');
+    const aed = isDubai ? ` (≈AED ${Math.round(portfolioStats.gainAed).toLocaleString('en-AE')})` : '';
     const inr = Math.round(portfolioStats.gainInr).toLocaleString('en-IN');
     const message = pickVariant([
-      `Your investments are up ₹${inr} (≈AED ${aed}) overall.`,
-      `Portfolio update: up ₹${inr} (≈AED ${aed}) since you started investing.`,
-      `Your investments have grown by ₹${inr} (≈AED ${aed}) — steady progress.`,
+      `Your investments are up ₹${inr}${aed} overall.`,
+      `Portfolio update: up ₹${inr}${aed} since you started investing.`,
+      `Your investments have grown by ₹${inr}${aed} — steady progress.`,
     ], seed);
     return { emoji: '📊', message };
   }

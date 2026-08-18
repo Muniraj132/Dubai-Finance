@@ -31,10 +31,15 @@ const navItems = [
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const settings = useSettings();
+  const isDubai = settings.accountType !== 'india';
   const updateSettings = useAppStore((s) => s.updateSettings);
   const rateJustUpdated = useAppStore((s) => s.rateJustUpdated);
   const setRateJustUpdated = useAppStore((s) => s.setRateJustUpdated);
   const { user, signOut } = useAuthStore();
+
+  // Converter and Dubai Life are Dubai-specific — India users have no AED
+  // to convert and no Dubai journey to track.
+  const visibleNavItems = navItems.filter((item) => isDubai || (item.to !== '/converter' && item.to !== '/dubai-life'));
 
   useEffect(() => {
     if (!rateJustUpdated) return;
@@ -82,7 +87,7 @@ export default function Layout() {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ to, icon: Icon, label }) => (
+          {visibleNavItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
@@ -128,7 +133,9 @@ export default function Layout() {
 
           {/* Rate + theme toggle */}
           <div className="flex items-center justify-between">
-            <span className="text-xs text-sidebar-muted">1 AED = ₹{settings.aedToInrRate}</span>
+            {isDubai
+              ? <span className="text-xs text-sidebar-muted">1 AED = ₹{settings.aedToInrRate}</span>
+              : <span />}
             <button
               onClick={toggleTheme}
               className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-sidebar-muted hover:text-sidebar-text transition-colors"

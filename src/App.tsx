@@ -5,6 +5,7 @@ import { SpeedInsights } from '@vercel/speed-insights/react';
 import Layout from './components/layout/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Auth from './pages/Auth';
+import ResetPassword from './pages/ResetPassword';
 import { useAppStore, useSettings } from './stores/useAppStore';
 import { useAuthStore } from './stores/useAuthStore';
 import { maybeRefreshExchangeRate } from './utils/exchangeRate';
@@ -31,7 +32,7 @@ const RouteFallback = () => (
 );
 
 function AppContent() {
-  const { user, loading, initialize: initAuth } = useAuthStore();
+  const { user, loading, passwordRecovery, initialize: initAuth } = useAuthStore();
   const { theme } = useSettings();
   const initApp = useAppStore((s) => s.initialize);
 
@@ -41,7 +42,11 @@ function AppContent() {
 
   useEffect(() => {
     if (user) {
-      initApp().then(() => maybeRefreshExchangeRate());
+      // India users have no AED to convert — skip the network fetch/rate
+      // write entirely rather than refreshing a rate nothing uses.
+      initApp().then(() => {
+        if (useAppStore.getState().settings.accountType !== 'india') maybeRefreshExchangeRate();
+      });
     }
   }, [user]);
 
@@ -56,6 +61,12 @@ function AppContent() {
       </div>
     );
   }
+
+  // Clicking the password-reset email link establishes a real session (user
+  // becomes truthy) before the user has actually chosen a new password — show
+  // the "set new password" screen instead of the normal signed-in app until
+  // that's done, regardless of the session already existing.
+  if (passwordRecovery) return <ResetPassword />;
 
   if (!user) return <Auth />;
 

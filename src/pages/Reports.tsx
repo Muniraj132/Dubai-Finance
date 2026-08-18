@@ -2,6 +2,7 @@ import { Download, FileText } from 'lucide-react';
 import { useExpenses, useIncomes, useGoals, useInvestments, useInvestmentTransactions, useLiabilities, useLiabilityTransactions, useSettings } from '../stores/useAppStore';
 import { PageHeader, Button, Card } from '../components/ui';
 import { exportToCSV, formatDate, resolveAed, resolveInr, computeLiabilityStats, groupByLiabilityId } from '../utils';
+import { useIsDubai } from '../hooks';
 
 export default function Reports() {
   const expenses = useExpenses();
@@ -12,6 +13,7 @@ export default function Reports() {
   const liabilities = useLiabilities();
   const liabilityTransactions = useLiabilityTransactions();
   const { aedToInrRate } = useSettings();
+  const isDubai = useIsDubai();
 
   const exportExpenses = () => {
     exportToCSV(
@@ -20,7 +22,7 @@ export default function Reports() {
         Category: e.category,
         Amount: e.amount,
         Currency: e.currency,
-        AmountAED: resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate),
+        ...(isDubai && { AmountAED: resolveAed(e.amount, e.currency, e.amountAed, aedToInrRate) }),
         AmountINR: resolveInr(e.amount, e.currency, e.amountInr, aedToInrRate),
         Notes: e.notes,
       })),
@@ -35,7 +37,7 @@ export default function Reports() {
         Source: i.source,
         Amount: i.amount,
         Currency: i.currency,
-        AmountAED: resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate),
+        ...(isDubai && { AmountAED: resolveAed(i.amount, i.currency, i.amountAed, aedToInrRate) }),
         AmountINR: resolveInr(i.amount, i.currency, i.amountInr, aedToInrRate),
         Notes: i.notes,
       })),
@@ -50,9 +52,9 @@ export default function Reports() {
         Target: g.targetAmount,
         Current: g.currentAmount,
         Currency: g.currency,
-        TargetAED: resolveAed(g.targetAmount, g.currency, g.targetAmountAed, aedToInrRate),
+        ...(isDubai && { TargetAED: resolveAed(g.targetAmount, g.currency, g.targetAmountAed, aedToInrRate) }),
         TargetINR: resolveInr(g.targetAmount, g.currency, g.targetAmountInr, aedToInrRate),
-        CurrentAED: resolveAed(g.currentAmount, g.currency, g.currentAmountAed, aedToInrRate),
+        ...(isDubai && { CurrentAED: resolveAed(g.currentAmount, g.currency, g.currentAmountAed, aedToInrRate) }),
         CurrentINR: resolveInr(g.currentAmount, g.currency, g.currentAmountInr, aedToInrRate),
         TargetDate: g.targetDate,
       })),
@@ -67,7 +69,7 @@ export default function Reports() {
         Type: i.type,
         Currency: i.currency,
         CurrentValue: i.currentValue,
-        CurrentValueAED: resolveAed(i.currentValue, i.currency, i.currentValueAed, aedToInrRate),
+        ...(isDubai && { CurrentValueAED: resolveAed(i.currentValue, i.currency, i.currentValueAed, aedToInrRate) }),
         CurrentValueINR: resolveInr(i.currentValue, i.currency, i.currentValueInr, aedToInrRate),
         Status: i.status,
         MaturityDate: i.maturityDate ?? '',
@@ -90,7 +92,7 @@ export default function Reports() {
           PricePerUnit: t.pricePerUnit ?? '',
           Amount: t.amount,
           Currency: t.currency,
-          AmountAED: resolveAed(t.amount, t.currency, t.amountAed, aedToInrRate),
+          ...(isDubai && { AmountAED: resolveAed(t.amount, t.currency, t.amountAed, aedToInrRate) }),
           AmountINR: resolveInr(t.amount, t.currency, t.amountInr, aedToInrRate),
           Notes: t.notes,
         };
@@ -110,10 +112,9 @@ export default function Reports() {
           Status: l.status,
           OpeningBalance: l.balance,
           Currency: l.currency,
-          OutstandingAED: s.outstandingAed,
+          ...(isDubai && { OutstandingAED: s.outstandingAed }),
           OutstandingINR: s.outstandingInr,
-          PrincipalPaidAED: s.principalPaidAed,
-          InterestPaidAED: s.interestPaidAed,
+          ...(isDubai && { PrincipalPaidAED: s.principalPaidAed, InterestPaidAED: s.interestPaidAed }),
           Notes: l.notes,
         };
       }),
@@ -132,7 +133,7 @@ export default function Reports() {
           Amount: t.amount,
           InterestAmount: t.interestAmount ?? '',
           Currency: t.currency,
-          AmountAED: resolveAed(t.amount, t.currency, t.amountAed, aedToInrRate),
+          ...(isDubai && { AmountAED: resolveAed(t.amount, t.currency, t.amountAed, aedToInrRate) }),
           AmountINR: resolveInr(t.amount, t.currency, t.amountInr, aedToInrRate),
           Notes: t.notes,
         };

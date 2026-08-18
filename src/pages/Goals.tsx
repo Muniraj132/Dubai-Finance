@@ -4,28 +4,30 @@ import { useAppStore, useGoals } from '../stores/useAppStore';
 import { Goal, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, ConfirmDialog, EmptyState, ProgressBar } from '../components/ui';
 import { GOAL_COLORS, formatCurrency, formatDate } from '../utils';
+import { useIsDubai } from '../hooks';
 
-const defaultForm = () => ({
+const defaultForm = (currency: Currency) => ({
   name: '',
   targetAmount: 0,
   currentAmount: 0,
   targetDate: '',
-  currency: 'AED' as Currency,
+  currency,
   color: GOAL_COLORS[0],
 });
 
 export default function Goals() {
   const goals = useGoals();
   const { addGoal, updateGoal, deleteGoal } = useAppStore();
+  const isDubai = useIsDubai();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [contributeId, setContributeId] = useState<string | null>(null);
   const [contributeAmount, setContributeAmount] = useState(0);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState(defaultForm());
+  const [form, setForm] = useState(defaultForm(isDubai ? 'AED' : 'INR'));
 
-  const openAdd = () => { setForm(defaultForm()); setEditId(null); setModalOpen(true); };
+  const openAdd = () => { setForm(defaultForm(isDubai ? 'AED' : 'INR')); setEditId(null); setModalOpen(true); };
   const openEdit = (g: Goal) => {
     setForm({ name: g.name, targetAmount: g.targetAmount, currentAmount: g.currentAmount, targetDate: g.targetDate, currency: g.currency, color: g.color });
     setEditId(g.id);
@@ -133,13 +135,15 @@ export default function Goals() {
           <FormField label="Goal Name">
             <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Emergency Fund" />
           </FormField>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="Currency">
-              <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
-                <option value="AED">AED</option>
-                <option value="INR">INR</option>
-              </Select>
-            </FormField>
+          <div className={isDubai ? 'grid grid-cols-2 gap-4' : ''}>
+            {isDubai && (
+              <FormField label="Currency">
+                <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
+                  <option value="AED">AED</option>
+                  <option value="INR">INR</option>
+                </Select>
+              </FormField>
+            )}
             <FormField label="Target Date">
               <Input type="date" value={form.targetDate} onChange={e => setForm(f => ({ ...f, targetDate: e.target.value }))} />
             </FormField>

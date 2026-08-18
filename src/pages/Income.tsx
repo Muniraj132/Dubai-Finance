@@ -4,15 +4,15 @@ import { useAppStore, useIncomes, useSettings } from '../stores/useAppStore';
 import { Income, IncomeSource, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState } from '../components/ui';
 import { formatDate, getCurrentMonthKey, getMonthKey, resolveAed, resolveInr } from '../utils';
-import { useMonthOptions } from '../hooks';
+import { useMonthOptions, useIsDubai } from '../hooks';
 
 const SOURCES: IncomeSource[] = ['Salary', 'Bonus', 'Freelance', 'Others'];
 const SOURCE_COLORS: Record<string, string> = { Salary: '#22c55e', Bonus: '#f59e0b', Freelance: '#3b82f6', Others: '#8b5cf6' };
 
-const defaultForm = (): Omit<Income, 'id' | 'createdAt'> => ({
+const defaultForm = (currency: Currency): Omit<Income, 'id' | 'createdAt'> => ({
   date: new Date().toISOString().split('T')[0],
   amount: 0,
-  currency: 'AED',
+  currency,
   source: 'Salary',
   notes: '',
 });
@@ -21,11 +21,12 @@ export default function IncomePage() {
   const incomes = useIncomes();
   const { addIncome, updateIncome, deleteIncome } = useAppStore();
   const settings = useSettings();
+  const isDubai = useIsDubai();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState(defaultForm());
+  const [form, setForm] = useState(defaultForm(isDubai ? 'AED' : 'INR'));
   const [filterMonth, setFilterMonth] = useState(getCurrentMonthKey());
   const [page, setPage] = useState(1);
 
@@ -44,7 +45,13 @@ export default function IncomePage() {
   const currentPage = Math.min(page, totalPages);
   const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  const openAdd = () => { setForm({ ...defaultForm(), exchangeRateUsed: settings.aedToInrRate }); setEditId(null); setModalOpen(true); };
+  const openAdd = () => {
+    setForm(isDubai
+      ? { ...defaultForm('AED'), exchangeRateUsed: settings.aedToInrRate }
+      : defaultForm('INR'));
+    setEditId(null);
+    setModalOpen(true);
+  };
   const openEdit = (inc: Income) => {
     setForm({
       date: inc.date,
@@ -52,7 +59,7 @@ export default function IncomePage() {
       currency: inc.currency,
       source: inc.source,
       notes: inc.notes,
-      exchangeRateUsed: inc.exchangeRateUsed ?? settings.aedToInrRate,
+      exchangeRateUsed: isDubai ? (inc.exchangeRateUsed ?? settings.aedToInrRate) : undefined,
     });
     setEditId(inc.id);
     setModalOpen(true);
@@ -69,7 +76,7 @@ export default function IncomePage() {
     <div className="space-y-5">
       <PageHeader
         title="Income"
-        subtitle={`${filtered.length} entries · AED ${total.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · ₹${totalInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+        subtitle={`${filtered.length} entries · ${isDubai ? `AED ${total.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · ` : ''}₹${totalInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
         action={<Button onClick={openAdd}><Plus size={16} /> Add Income</Button>}
       />
       <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/30">
@@ -101,7 +108,7 @@ export default function IncomePage() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Source</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide hidden sm:table-cell">Notes</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Amount</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Amount (INR)</th>
+                {isDubai && <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Amount (INR)</th>}
                 <th className="px-4 py-3 w-16"></th>
               </tr>
             </thead>
@@ -122,12 +129,14 @@ export default function IncomePage() {
                   <td className="px-4 py-3 text-right font-semibold text-green-400 whitespace-nowrap">
                     +{inc.currency} {inc.amount.toLocaleString('en-AE', { maximumFractionDigits: 2 })}
                   </td>
-                  <td className="px-4 py-3 text-right text-muted text-xs whitespace-nowrap">
-                    ₹{resolveInr(inc.amount, inc.currency, inc.amountInr, settings.aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-                    {inc.exchangeRateUsed != null && (
-                      <div className="text-[10px] text-muted/60">@ {inc.exchangeRateUsed.toFixed(2)}</div>
-                    )}
-                  </td>
+                  {isDubai && (
+                    <td className="px-4 py-3 text-right text-muted text-xs whitespace-nowrap">
+                      ₹{resolveInr(inc.amount, inc.currency, inc.amountInr, settings.aedToInrRate).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      {inc.exchangeRateUsed != null && (
+                        <div className="text-[10px] text-muted/60">@ {inc.exchangeRateUsed.toFixed(2)}</div>
+                      )}
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => openEdit(inc)} className="p-1 text-muted hover:text-primary transition-colors"><Edit2 size={13} /></button>
@@ -167,33 +176,37 @@ export default function IncomePage() {
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? 'Edit Income' : 'Add Income'}>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className={isDubai ? 'grid grid-cols-2 gap-4' : ''}>
             <FormField label="Date">
               <Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
             </FormField>
-            <FormField label="Currency">
-              <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
-                <option value="AED">AED</option>
-                <option value="INR">INR</option>
-              </Select>
-            </FormField>
+            {isDubai && (
+              <FormField label="Currency">
+                <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
+                  <option value="AED">AED</option>
+                  <option value="INR">INR</option>
+                </Select>
+              </FormField>
+            )}
           </div>
           <FormField label="Amount">
             <Input type="number" min="0" step="0.01" value={form.amount || ''} onChange={e => setForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} placeholder="0.00" />
           </FormField>
-          <FormField label="Exchange Rate (1 AED = ? INR)">
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.exchangeRateUsed ?? ''}
-              onChange={e => setForm(f => ({ ...f, exchangeRateUsed: parseFloat(e.target.value) || 0 }))}
-              placeholder={String(settings.aedToInrRate)}
-            />
-            <div className="text-[11px] text-muted mt-1">
-              Defaults to today's rate ({settings.aedToInrRate}). Override with the exact rate your bank used — it's locked to this entry and won't change later.
-            </div>
-          </FormField>
+          {isDubai && (
+            <FormField label="Exchange Rate (1 AED = ? INR)">
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.exchangeRateUsed ?? ''}
+                onChange={e => setForm(f => ({ ...f, exchangeRateUsed: parseFloat(e.target.value) || 0 }))}
+                placeholder={String(settings.aedToInrRate)}
+              />
+              <div className="text-[11px] text-muted mt-1">
+                Defaults to today's rate ({settings.aedToInrRate}). Override with the exact rate your bank used — it's locked to this entry and won't change later.
+              </div>
+            </FormField>
+          )}
           <FormField label="Source">
             <Select value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value as IncomeSource }))}>
               {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}

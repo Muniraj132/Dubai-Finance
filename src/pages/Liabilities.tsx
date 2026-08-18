@@ -7,6 +7,7 @@ import {
   formatDate, formatCurrency, computeLiabilityStats, computePortfolioLiabilityStats, groupByLiabilityId,
   LIABILITY_TYPES, LIABILITY_TYPE_BADGE,
 } from '../utils';
+import { useIsDubai } from '../hooks';
 
 const STATUS_BADGE: Record<LiabilityStatus, string> = { active: 'theme', closed: 'green' };
 const TXN_TYPE_BADGE: Record<LiabilityTxnType, string> = { Charge: 'red', Payment: 'green' };
@@ -29,16 +30,16 @@ type TxnForm = {
   notes: string;
 };
 
-const defaultLiabilityForm = (): LiabilityForm => ({
+const defaultLiabilityForm = (currency: Currency): LiabilityForm => ({
   type: 'Loan',
   name: '',
-  currency: 'AED',
+  currency,
   balance: '',
   status: 'active',
   notes: '',
 });
 
-const defaultTxnForm = (currency: Currency = 'AED'): TxnForm => ({
+const defaultTxnForm = (currency: Currency): TxnForm => ({
   type: 'Payment',
   date: new Date().toISOString().split('T')[0],
   amount: '',
@@ -55,6 +56,7 @@ export default function Liabilities() {
   const liabilities = useLiabilities();
   const transactions = useLiabilityTransactions();
   const { aedToInrRate } = useSettings();
+  const isDubai = useIsDubai();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -63,13 +65,13 @@ export default function Liabilities() {
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [payOffId, setPayOffId] = useState<string | null>(null);
-  const [form, setForm] = useState<LiabilityForm>(defaultLiabilityForm());
+  const [form, setForm] = useState<LiabilityForm>(defaultLiabilityForm(isDubai ? 'AED' : 'INR'));
 
   // Transaction modals
   const [txnModal, setTxnModal] = useState(false);
   const [editTxnId, setEditTxnId] = useState<string | null>(null);
   const [deleteTxnId, setDeleteTxnId] = useState<string | null>(null);
-  const [txnForm, setTxnForm] = useState<TxnForm>(defaultTxnForm());
+  const [txnForm, setTxnForm] = useState<TxnForm>(defaultTxnForm(isDubai ? 'AED' : 'INR'));
 
   // ── Derived data ──────────────────────────────────────────────────
 
@@ -106,7 +108,7 @@ export default function Liabilities() {
 
   // ── Liability handlers ────────────────────────────────────────────
 
-  const openAdd = () => { setForm(defaultLiabilityForm()); setEditId(null); setModalOpen(true); };
+  const openAdd = () => { setForm(defaultLiabilityForm(isDubai ? 'AED' : 'INR')); setEditId(null); setModalOpen(true); };
   const openEdit = (l: Liability) => {
     setForm({ type: l.type, name: l.name, currency: l.currency, balance: String(l.balance), status: l.status, notes: l.notes });
     setEditId(l.id);
@@ -164,7 +166,7 @@ export default function Liabilities() {
 
   // ── Transaction handlers ──────────────────────────────────────────
 
-  const openAddTxn = () => { setTxnForm(defaultTxnForm(selectedLiability?.currency)); setEditTxnId(null); setTxnModal(true); };
+  const openAddTxn = () => { setTxnForm(defaultTxnForm(selectedLiability?.currency ?? (isDubai ? 'AED' : 'INR'))); setEditTxnId(null); setTxnModal(true); };
   const openEditTxn = (t: LiabilityTransaction) => {
     setTxnForm({
       type: t.type,
@@ -217,28 +219,28 @@ export default function Liabilities() {
             <StatCard
               title="Total Outstanding"
               value={formatCurrency(portfolioStats.outstandingInr, 'INR')}
-              sub={`≈ AED ${portfolioStats.outstandingAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+              sub={isDubai ? `≈ AED ${portfolioStats.outstandingAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : undefined}
               icon={<Scale size={16} />}
               color="red"
             />
             <StatCard
               title="Total Charged"
               value={formatCurrency(portfolioStats.chargesInr, 'INR')}
-              sub={`≈ AED ${portfolioStats.chargesAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+              sub={isDubai ? `≈ AED ${portfolioStats.chargesAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : undefined}
               icon={<CreditCard size={16} />}
               color="orange"
             />
             <StatCard
               title="Principal Paid"
               value={formatCurrency(portfolioStats.principalPaidInr, 'INR')}
-              sub={`≈ AED ${portfolioStats.principalPaidAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+              sub={isDubai ? `≈ AED ${portfolioStats.principalPaidAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : undefined}
               icon={<HandCoins size={16} />}
               color="green"
             />
             <StatCard
               title="Interest Paid"
               value={formatCurrency(portfolioStats.interestPaidInr, 'INR')}
-              sub={`≈ AED ${portfolioStats.interestPaidAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+              sub={isDubai ? `≈ AED ${portfolioStats.interestPaidAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : undefined}
               icon={<Scale size={16} />}
               color="amber"
             />
@@ -401,18 +403,20 @@ export default function Liabilities() {
       {/* Liability Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? 'Edit Liability' : 'Add Liability'}>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className={isDubai ? 'grid grid-cols-2 gap-4' : ''}>
             <FormField label="Type">
               <Select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value as LiabilityType }))}>
                 {LIABILITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </Select>
             </FormField>
-            <FormField label="Currency">
-              <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
-                <option value="AED">AED</option>
-                <option value="INR">INR</option>
-              </Select>
-            </FormField>
+            {isDubai && (
+              <FormField label="Currency">
+                <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
+                  <option value="AED">AED</option>
+                  <option value="INR">INR</option>
+                </Select>
+              </FormField>
+            )}
           </div>
           <FormField label="Name">
             <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Car Loan, HDFC Credit Card" />
@@ -455,16 +459,18 @@ export default function Liabilities() {
               <Input type="date" value={txnForm.date} onChange={e => setTxnForm(f => ({ ...f, date: e.target.value }))} />
             </FormField>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className={isDubai ? 'grid grid-cols-2 gap-4' : ''}>
             <FormField label="Amount">
               <Input type="number" min="0" step="0.01" value={txnForm.amount} onChange={e => setTxnForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
             </FormField>
-            <FormField label="Currency">
-              <Select value={txnForm.currency} onChange={e => setTxnForm(f => ({ ...f, currency: e.target.value as Currency }))}>
-                <option value="AED">AED</option>
-                <option value="INR">INR</option>
-              </Select>
-            </FormField>
+            {isDubai && (
+              <FormField label="Currency">
+                <Select value={txnForm.currency} onChange={e => setTxnForm(f => ({ ...f, currency: e.target.value as Currency }))}>
+                  <option value="AED">AED</option>
+                  <option value="INR">INR</option>
+                </Select>
+              </FormField>
+            )}
           </div>
           {txnForm.type === 'Payment' && (
             <FormField label="Of which, interest (optional)">
