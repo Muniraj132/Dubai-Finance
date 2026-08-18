@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Palmtree, Calendar, TrendingUp, PiggyBank, Gem, Heart, LineChart } from 'lucide-react';
 import { useExpenses, useIncomes, useGoldPurchases, useInvestments, useInvestmentTransactions, useSettings } from '../stores/useAppStore';
 import { PageHeader, StatCard } from '../components/ui';
 import { resolveAed, resolveInr, formatCurrency, computePortfolioStats, EXPENSE_CATEGORIES, getMonthKey, getMonthSalaryRate } from '../utils';
-import { useSalaryRateMap } from '../hooks';
+import { useSalaryRateMap, useIsDubai } from '../hooks';
 
 export default function DubaiLife() {
   const expenses = useExpenses();
@@ -13,6 +14,7 @@ export default function DubaiLife() {
   const investmentTransactions = useInvestmentTransactions();
   const settings = useSettings();
   const { aedToInrRate, dubaiArrivalDate } = settings;
+  const isDubai = useIsDubai();
 
   // Every AED figure is valued at that transaction's month's salary
   // conversion rate (see buildSalaryRateMap in utils), matching
@@ -110,6 +112,10 @@ export default function DubaiLife() {
     { label: '1 Year', days: 365, done: daysInDubai >= 365 },
     { label: '2 Years', days: 730, done: daysInDubai >= 730 },
   ];
+
+  // This whole page is Dubai-specific — guards against direct URL navigation
+  // for India users (the sidebar link is already hidden for them).
+  if (!isDubai) return <Navigate to="/" replace />;
 
   return (
     <div className="space-y-6">

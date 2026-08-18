@@ -6,7 +6,7 @@ import {
   computeMonthlyStats, computeInvestmentStats, computePortfolioStats, getMonthLabel, CATEGORY_COLORS, INVESTMENT_TYPE_COLORS,
   resolveAed, getCurrentMonthKey, getMonthKey, getMonthSalaryRate,
 } from '../utils';
-import { useSalaryRateMap } from '../hooks';
+import { useSalaryRateMap, useIsDubai } from '../hooks';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
@@ -20,7 +20,7 @@ type TooltipPayloadItem = {
   payload?: Record<string, number | string>;
 };
 
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadItem[]; label?: string }) => {
+const CustomTooltip = ({ active, payload, label, isDubai }: { active?: boolean; payload?: TooltipPayloadItem[]; label?: string; isDubai?: boolean }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-card-border rounded-xl px-4 py-3 shadow-xl text-xs">
@@ -36,7 +36,7 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
                 {typeof inrValue === 'number' ? `₹${inrValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : `AED ${typeof p.value === 'number' ? p.value.toLocaleString('en-AE', { maximumFractionDigits: 0 }) : p.value}`}
               </span>
             </div>
-            {typeof inrValue === 'number' && (
+            {isDubai && typeof inrValue === 'number' && (
               <div className="text-muted ml-4">≈ AED {typeof p.value === 'number' ? p.value.toLocaleString('en-AE', { maximumFractionDigits: 0 }) : p.value}</div>
             )}
           </div>
@@ -46,6 +46,16 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
   );
 };
 
+// Shared pie/bar tooltip formatter for charts with an INR value plus an AED
+// equivalent in the payload — India users only ever care about the INR half.
+const inrTooltipFormatter = (isDubai: boolean, label = '') =>
+  (v: number, _name: string, entry: { payload?: { valueInr?: number } }) => [
+    isDubai
+      ? `₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`
+      : `₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
+    label,
+  ];
+
 export default function Analytics() {
   const expenses = useExpenses();
   const incomes = useIncomes();
@@ -54,6 +64,7 @@ export default function Analytics() {
   const chitFunds = useChitFunds();
   const chitInstallments = useChitInstallments();
   const { aedToInrRate } = useSettings();
+  const isDubai = useIsDubai();
   const currentMonth = getCurrentMonthKey();
 
   // Every AED figure is valued at that transaction's month's salary
@@ -209,7 +220,7 @@ export default function Analytics() {
           <div>
             <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income this month!</div>
             <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
-              Spent ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} (AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}) vs income ₹{currentMonthIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}. Review your spending categories below.
+              Spent ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}{isDubai ? ` (AED ${currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })})` : ''} vs income ₹{currentMonthIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}. Review your spending categories below.
             </div>
           </div>
         </div>
@@ -220,7 +231,7 @@ export default function Analytics() {
           <div>
             <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
             <div className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
-              ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} spent (AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}). Only ₹{(currentMonthIncomeInr - currentMonthExpensesInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })} left this month.
+              ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} spent{isDubai ? ` (AED ${currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })})` : ''}. Only ₹{(currentMonthIncomeInr - currentMonthExpensesInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })} left this month.
             </div>
           </div>
         </div>
@@ -239,27 +250,33 @@ export default function Analytics() {
             <div className="text-lg font-bold text-green-600 dark:text-green-400">
               ₹{allTimeIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
-            <div className="text-xs text-muted mt-0.5">
-              ≈ AED {allTimeIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
-            </div>
+            {isDubai && (
+              <div className="text-xs text-muted mt-0.5">
+                ≈ AED {allTimeIncome.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+              </div>
+            )}
           </div>
           <div className="rounded-xl bg-red-500/5 border border-red-500/15 px-4 py-3">
             <div className="text-xs text-muted mb-1">Total Expenses</div>
             <div className="text-lg font-bold text-red-600 dark:text-red-400">
               ₹{allTimeExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
-            <div className="text-xs text-muted mt-0.5">
-              ≈ AED {allTimeExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
-            </div>
+            {isDubai && (
+              <div className="text-xs text-muted mt-0.5">
+                ≈ AED {allTimeExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+              </div>
+            )}
           </div>
           <div className="rounded-xl bg-blue-500/5 border border-blue-500/15 px-4 py-3">
             <div className="text-xs text-muted mb-1">Investments</div>
             <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
               ₹{portfolioStats.currentValueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </div>
-            <div className="text-xs text-muted mt-0.5">
-              ≈ AED {portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
-            </div>
+            {isDubai && (
+              <div className="text-xs text-muted mt-0.5">
+                ≈ AED {portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
+              </div>
+            )}
           </div>
           <div className="rounded-xl bg-purple-500/5 border border-purple-500/15 px-4 py-3">
             <div className="text-xs text-muted mb-1">Chit Fund Paid</div>
@@ -281,7 +298,7 @@ export default function Analytics() {
               <div className="text-xs text-green-700 dark:text-green-400 font-medium mb-1">🏆 Best Saving Month</div>
               <div className="text-primary font-bold">{getMonthLabel(bestSavingMonth.month)}</div>
               <div className="text-sm text-muted">₹{bestSavingMonth.savingsInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} saved</div>
-              <div className="text-xs text-muted mt-0.5">≈ AED {bestSavingMonth.savings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</div>
+              {isDubai && <div className="text-xs text-muted mt-0.5">≈ AED {bestSavingMonth.savings.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</div>}
             </div>
           )}
           {worstSpendingMonth && (
@@ -289,7 +306,7 @@ export default function Analytics() {
               <div className="text-xs text-red-700 dark:text-red-400 font-medium mb-1">📊 Highest Spending Month</div>
               <div className="text-primary font-bold">{getMonthLabel(worstSpendingMonth.month)}</div>
               <div className="text-sm text-muted">₹{worstSpendingMonth.expensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} spent</div>
-              <div className="text-xs text-muted mt-0.5">≈ AED {worstSpendingMonth.expenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</div>
+              {isDubai && <div className="text-xs text-muted mt-0.5">≈ AED {worstSpendingMonth.expenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</div>}
             </div>
           )}
         </div>
@@ -306,7 +323,7 @@ export default function Analytics() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={55} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={<CustomTooltip isDubai={isDubai} />} />
               <Line type="monotone" dataKey="income" stroke="#22c55e" strokeWidth={2} dot={{ fill: '#22c55e', r: 3 }} name="income" />
               <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} dot={{ fill: '#ef4444', r: 3 }} name="expenses" />
               <Line type="monotone" dataKey="savings" stroke="#06b6d4" strokeWidth={2} dot={{ fill: '#06b6d4', r: 3 }} strokeDasharray="4 2" name="savings" />
@@ -330,7 +347,7 @@ export default function Analytics() {
                       <Cell key={entry.name} fill={INVESTMENT_TYPE_COLORS[entry.name] ?? '#78716c'} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number, _name: string, entry: { payload?: { valueInr?: number } }) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, '']} />
+                  <Tooltip formatter={inrTooltipFormatter(isDubai)} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-1.5 mt-2">
@@ -342,7 +359,7 @@ export default function Analytics() {
                     </div>
                     <div className="text-right">
                       <span className="text-primary font-medium">₹{t.valueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
-                      <span className="text-muted ml-1.5">≈ AED {t.value.toLocaleString()}</span>
+                      {isDubai && <span className="text-muted ml-1.5">≈ AED {t.value.toLocaleString()}</span>}
                     </div>
                   </div>
                 ))}
@@ -362,7 +379,8 @@ export default function Analytics() {
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={90} />
                 <Tooltip formatter={(v: number, name: string, entry: { payload?: { investedAed?: number; currentAed?: number } }) => {
                   const aed = name === 'invested' ? entry?.payload?.investedAed : entry?.payload?.currentAed;
-                  return [`₹${v.toLocaleString('en-IN')} · AED ${(aed ?? 0).toLocaleString()}`, name === 'invested' ? 'Invested' : 'Current Value'];
+                  const label = name === 'invested' ? 'Invested' : 'Current Value';
+                  return [isDubai ? `₹${v.toLocaleString('en-IN')} · AED ${(aed ?? 0).toLocaleString()}` : `₹${v.toLocaleString('en-IN')}`, label];
                 }} />
                 <Bar dataKey="invested" fill="#78716c" radius={[0, 4, 4, 0]} name="invested" />
                 <Bar dataKey="current" fill="#3b82f6" radius={[0, 4, 4, 0]} name="current" />
@@ -378,7 +396,7 @@ export default function Analytics() {
           <h2 className="text-sm font-semibold text-primary mb-1">This Month — by Category</h2>
           <div className="text-xs text-muted mb-4">
             Total: ₹{currentMonthExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-          <span className="ml-2 text-[#6366F1]">≈ AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</span>
+          {isDubai && <span className="ml-2 text-[#6366F1]">≈ AED {currentMonthExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</span>}
           </div>
           {currentMonthCategoryData.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-muted text-sm">No expenses this month.</div>
@@ -391,7 +409,7 @@ export default function Analytics() {
                       <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] ?? '#78716c'} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number, _name: string, entry: { payload?: { valueInr?: number } }) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, '']} />
+                  <Tooltip formatter={inrTooltipFormatter(isDubai)} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-1.5 mt-2">
@@ -403,7 +421,7 @@ export default function Analytics() {
                     </div>
                     <div className="text-right">
                       <span className="text-primary font-medium">₹{cat.valueInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
-                      <span className="text-muted ml-1.5">≈ AED {cat.value.toLocaleString()}</span>
+                      {isDubai && <span className="text-muted ml-1.5">≈ AED {cat.value.toLocaleString()}</span>}
                     </div>
                   </div>
                 ))}
@@ -422,7 +440,7 @@ export default function Analytics() {
               <BarChart data={categoryData} layout="vertical">
                 <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={80} />
-                <Tooltip formatter={(v: number, _name: string, entry: { payload?: { valueInr?: number } }) => [`₹${(entry?.payload?.valueInr ?? v).toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${v.toLocaleString()}`, 'Total']} />
+                <Tooltip formatter={inrTooltipFormatter(isDubai, 'Total')} />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {categoryData.map(entry => (
                     <Cell key={entry.name} fill={CATEGORY_COLORS[entry.name] ?? '#78716c'} />
@@ -445,7 +463,7 @@ export default function Analytics() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: 'var(--color-muted)' }} axisLine={false} tickLine={false} width={55} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={<CustomTooltip isDubai={isDubai} />} />
               <Bar dataKey="savings" fill="#06b6d4" radius={[4, 4, 0, 0]} name="savings">
                 {chartData.map((entry, i) => (
                   <Cell key={i} fill={entry.savings >= 0 ? '#06b6d4' : '#ef4444'} />

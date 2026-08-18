@@ -1,18 +1,25 @@
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { ArrowRightLeft, Calculator, Settings } from 'lucide-react';
 import { useAppStore, useSettings } from '../stores/useAppStore';
 import { PageHeader, FormField, Input, Button, Card } from '../components/ui';
+import { useIsDubai } from '../hooks';
 
 const QUICK_AMOUNTS = [100, 500, 1000, 2000, 5000, 10000];
 
 export default function Converter() {
   const settings = useSettings();
   const updateSettings = useAppStore(s => s.updateSettings);
+  const isDubai = useIsDubai();
 
   const [aedAmount, setAedAmount] = useState('');
   const [inrAmount, setInrAmount] = useState('');
   const [editRate, setEditRate] = useState(false);
   const [newRate, setNewRate] = useState(settings.aedToInrRate.toString());
+
+  // AED<->INR conversion is meaningless for India users — guards against
+  // direct URL navigation (the sidebar link is already hidden for them).
+  if (!isDubai) return <Navigate to="/" replace />;
 
   const handleAED = (val: string) => {
     setAedAmount(val);

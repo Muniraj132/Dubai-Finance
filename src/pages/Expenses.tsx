@@ -4,12 +4,12 @@ import { useAppStore, useExpenses, useSettings, useIncomes } from '../stores/use
 import { Expense, ExpenseCategory, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState, Badge } from '../components/ui';
 import { EXPENSE_CATEGORIES, CATEGORY_COLORS, formatDate, getCurrentMonthKey, getMonthKey, resolveAed, getMonthSalaryRate } from '../utils';
-import { useMonthOptions, useSalaryRateMap } from '../hooks';
+import { useMonthOptions, useSalaryRateMap, useIsDubai } from '../hooks';
 
-const defaultForm = (): Omit<Expense, 'id' | 'createdAt'> => ({
+const defaultForm = (currency: Currency): Omit<Expense, 'id' | 'createdAt'> => ({
   date: new Date().toISOString().split('T')[0],
   amount: 0,
-  currency: 'AED',
+  currency,
   category: 'Food',
   notes: '',
 });
@@ -20,11 +20,12 @@ export default function Expenses() {
   const { addExpense, updateExpense, deleteExpense } = useAppStore();
   const settings = useSettings();
   const { aedToInrRate } = settings;
+  const isDubai = useIsDubai();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState(defaultForm());
+  const [form, setForm] = useState(defaultForm(isDubai ? 'AED' : 'INR'));
   const [search, setSearch] = useState('');
   const [filterMonth, setFilterMonth] = useState(getCurrentMonthKey());
   const [filterCategory, setFilterCategory] = useState<string>('All');
@@ -103,7 +104,7 @@ export default function Expenses() {
     ? `≈ ₹${convertedAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })} INR`
     : `≈ AED ${convertedAmount.toLocaleString('en-AE', { maximumFractionDigits: 2 })}`;
 
-  const openAdd = () => { setForm(defaultForm()); setEditId(null); setModalOpen(true); };
+  const openAdd = () => { setForm(defaultForm(isDubai ? 'AED' : 'INR')); setEditId(null); setModalOpen(true); };
   const openEdit = (exp: Expense) => {
     setForm({ date: exp.date, amount: exp.amount, currency: exp.currency, category: exp.category, notes: exp.notes });
     setEditId(exp.id);
@@ -121,7 +122,7 @@ export default function Expenses() {
     <div className="space-y-5">
       <PageHeader
         title="Expenses"
-        subtitle={`${filtered.length} transactions · ₹${totalFilteredINR.toLocaleString('en-IN', { maximumFractionDigits: 0 })} · AED ${totalFiltered.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+        subtitle={`${filtered.length} transactions · ₹${totalFilteredINR.toLocaleString('en-IN', { maximumFractionDigits: 0 })}${isDubai ? ` · AED ${totalFiltered.toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : ''}`}
         action={<Button onClick={openAdd}><Plus size={16} /> Add Expense</Button>}
       />
 
@@ -132,7 +133,7 @@ export default function Expenses() {
           <div>
             <div className="text-sm font-semibold text-red-700 dark:text-red-400">Expenses exceed income this month!</div>
             <div className="text-xs text-red-700/80 dark:text-red-300/80 mt-0.5">
-              Spent ₹{monthlyExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} (AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}) vs income ₹{monthlyIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
+              Spent ₹{monthlyExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}{isDubai ? ` (AED ${monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })})` : ''} vs income ₹{monthlyIncomeInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}. Reduce spending to avoid a deficit.
             </div>
           </div>
         </div>
@@ -143,7 +144,7 @@ export default function Expenses() {
           <div>
             <div className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">High spending — {(spendingRatio * 100).toFixed(0)}% of income used</div>
             <div className="text-xs text-yellow-700/80 dark:text-yellow-300/80 mt-0.5">
-              ₹{monthlyExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} spent (AED {monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })}). Only ₹{(monthlyIncomeInr - monthlyExpensesInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })} remaining this month.
+              ₹{monthlyExpensesInr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} spent{isDubai ? ` (AED ${monthlyExpenses.toLocaleString('en-AE', { maximumFractionDigits: 0 })})` : ''}. Only ₹{(monthlyIncomeInr - monthlyExpensesInr).toLocaleString('en-IN', { maximumFractionDigits: 0 })} remaining this month.
             </div>
           </div>
         </div>
@@ -203,11 +204,13 @@ export default function Expenses() {
                         <div className="font-semibold text-red-400 text-sm">
                           {exp.currency} {exp.amount.toLocaleString('en-AE', { maximumFractionDigits: 2 })}
                         </div>
-                        <div className="text-[10px] text-muted mt-0.5">
-                          {exp.currency === 'AED'
-                            ? `≈ ₹${inINR.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
-                            : `≈ AED ${inAED.toLocaleString('en-AE', { maximumFractionDigits: 2 })}`}
-                        </div>
+                        {isDubai && (
+                          <div className="text-[10px] text-muted mt-0.5">
+                            {exp.currency === 'AED'
+                              ? `≈ ₹${inINR.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                              : `≈ AED ${inAED.toLocaleString('en-AE', { maximumFractionDigits: 2 })}`}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -255,16 +258,18 @@ export default function Expenses() {
       {/* Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? 'Edit Expense' : 'Add Expense'}>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className={isDubai ? 'grid grid-cols-2 gap-4' : ''}>
             <FormField label="Date">
               <Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
             </FormField>
-            <FormField label="Currency">
-              <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
-                <option value="AED">AED</option>
-                <option value="INR">INR</option>
-              </Select>
-            </FormField>
+            {isDubai && (
+              <FormField label="Currency">
+                <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
+                  <option value="AED">AED</option>
+                  <option value="INR">INR</option>
+                </Select>
+              </FormField>
+            )}
           </div>
           <FormField label="Amount">
             <Input
@@ -275,7 +280,7 @@ export default function Expenses() {
               onChange={e => setForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))}
               placeholder="0.00"
             />
-            {form.amount > 0 && (
+            {isDubai && form.amount > 0 && (
               <div className="text-xs text-[#6366F1] font-medium">{convertedLabel}</div>
             )}
           </FormField>

@@ -1,5 +1,11 @@
 export type Currency = 'AED' | 'INR';
 
+// 'dubai' users see AED + INR everywhere (existing behavior, unchanged).
+// 'india' users work INR-only — AED pickers, sub-labels, and Dubai-specific
+// pages (Converter, Dubai Life) are hidden. Chosen once at registration
+// (src/pages/Auth.tsx), stored on `settings.accountType`.
+export type AccountType = 'dubai' | 'india';
+
 export type ExpenseCategory =
   | 'Rent'
   | 'Food'
@@ -92,6 +98,7 @@ export interface AppSettings {
   // ISO timestamp of the last automatic exchange-rate fetch. Null on
   // legacy rows/first run — treated as "always stale" by exchangeRate.ts.
   rateFetchedAt?: string | null;
+  accountType: AccountType;
 }
 
 export interface MonthlyStats {

@@ -14,6 +14,7 @@ import {
   INVESTMENT_TYPES, INVESTMENT_TYPE_BADGE,
 } from '../utils';
 import { searchMfSchemes, fetchLatestNav, MfSchemeSearchResult } from '../utils/mfNav';
+import { useIsDubai } from '../hooks';
 
 const STATUS_BADGE: Record<InvestmentStatus, string> = { active: 'theme', closed: 'red' };
 const TXN_TYPE_BADGE: Record<InvestmentTxnType, string> = { Buy: 'green', SIP: 'blue', Sell: 'red', Dividend: 'amber' };
@@ -47,10 +48,10 @@ type TxnForm = {
   notes: string;
 };
 
-const defaultInvestmentForm = (): InvestmentForm => ({
+const defaultInvestmentForm = (currency: Currency): InvestmentForm => ({
   type: 'Mutual Fund',
   name: '',
-  currency: 'AED',
+  currency,
   currentValue: '',
   maturityDate: '',
   interestRate: '',
@@ -62,7 +63,7 @@ const defaultInvestmentForm = (): InvestmentForm => ({
   notes: '',
 });
 
-const defaultTxnForm = (currency: Currency = 'AED'): TxnForm => ({
+const defaultTxnForm = (currency: Currency): TxnForm => ({
   type: 'Buy',
   date: new Date().toISOString().split('T')[0],
   units: '',
@@ -81,6 +82,7 @@ export default function Investments() {
   const investments = useInvestments();
   const transactions = useInvestmentTransactions();
   const { aedToInrRate } = useSettings();
+  const isDubai = useIsDubai();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -88,7 +90,7 @@ export default function Investments() {
   const [invModal, setInvModal] = useState(false);
   const [editInvId, setEditInvId] = useState<string | null>(null);
   const [deleteInvId, setDeleteInvId] = useState<string | null>(null);
-  const [invForm, setInvForm] = useState<InvestmentForm>(defaultInvestmentForm());
+  const [invForm, setInvForm] = useState<InvestmentForm>(defaultInvestmentForm(isDubai ? 'AED' : 'INR'));
 
   // AMFI scheme search (for linking a Mutual Fund to live NAV refresh)
   const [schemeQuery, setSchemeQuery] = useState('');
@@ -106,7 +108,7 @@ export default function Investments() {
   const [txnModal, setTxnModal] = useState(false);
   const [editTxnId, setEditTxnId] = useState<string | null>(null);
   const [deleteTxnId, setDeleteTxnId] = useState<string | null>(null);
-  const [txnForm, setTxnForm] = useState<TxnForm>(defaultTxnForm());
+  const [txnForm, setTxnForm] = useState<TxnForm>(defaultTxnForm(isDubai ? 'AED' : 'INR'));
 
   // ── Derived data ──────────────────────────────────────────────────
 
@@ -149,7 +151,7 @@ export default function Investments() {
   // ── Investment handlers ───────────────────────────────────────────
 
   const openAddInvestment = () => {
-    setInvForm(defaultInvestmentForm());
+    setInvForm(defaultInvestmentForm(isDubai ? 'AED' : 'INR'));
     setEditInvId(null);
     setSchemeQuery('');
     setSchemeResults([]);
@@ -269,7 +271,7 @@ export default function Investments() {
   // ── Transaction handlers ──────────────────────────────────────────
 
   const openAddTxn = () => {
-    setTxnForm(defaultTxnForm(selectedInvestment?.currency));
+    setTxnForm(defaultTxnForm(selectedInvestment?.currency ?? (isDubai ? 'AED' : 'INR')));
     setEditTxnId(null);
     setTxnModal(true);
   };
@@ -338,28 +340,30 @@ export default function Investments() {
             <StatCard
               title="Total Invested"
               value={formatCurrency(portfolioStats.investedInr, 'INR')}
-              sub={`≈ AED ${portfolioStats.investedAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+              sub={isDubai ? `≈ AED ${portfolioStats.investedAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : undefined}
               icon={<Wallet size={16} />}
               color="theme"
             />
             <StatCard
               title="Current Value"
               value={formatCurrency(portfolioStats.currentValueInr, 'INR')}
-              sub={`≈ AED ${portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+              sub={isDubai ? `≈ AED ${portfolioStats.currentValueAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : undefined}
               icon={<LineChart size={16} />}
               color="blue"
             />
             <StatCard
               title="Gain / Loss"
               value={`${portfolioStats.gainInr >= 0 ? '+' : ''}${formatCurrency(portfolioStats.gainInr, 'INR')}`}
-              sub={`≈ AED ${portfolioStats.gainAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · ${portfolioStats.gainPct >= 0 ? '+' : ''}${portfolioStats.gainPct.toFixed(1)}%`}
+              sub={isDubai
+                ? `≈ AED ${portfolioStats.gainAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · ${portfolioStats.gainPct >= 0 ? '+' : ''}${portfolioStats.gainPct.toFixed(1)}%`
+                : `${portfolioStats.gainPct >= 0 ? '+' : ''}${portfolioStats.gainPct.toFixed(1)}%`}
               icon={portfolioStats.gainAed >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
               color={portfolioStats.gainAed >= 0 ? 'green' : 'red'}
             />
             <StatCard
               title="Dividends Received"
               value={formatCurrency(portfolioStats.dividendsInr, 'INR')}
-              sub={`≈ AED ${portfolioStats.dividendsAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+              sub={isDubai ? `≈ AED ${portfolioStats.dividendsAed.toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : undefined}
               icon={<Coins size={16} />}
               color="amber"
             />
@@ -566,18 +570,20 @@ export default function Investments() {
       {/* Investment Modal */}
       <Modal open={invModal} onClose={() => setInvModal(false)} title={editInvId ? 'Edit Investment' : 'Add Investment'}>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className={isDubai ? 'grid grid-cols-2 gap-4' : ''}>
             <FormField label="Type">
               <Select value={invForm.type} onChange={e => setInvForm(f => ({ ...f, type: e.target.value as InvestmentType }))}>
                 {INVESTMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </Select>
             </FormField>
-            <FormField label="Currency">
-              <Select value={invForm.currency} onChange={e => setInvForm(f => ({ ...f, currency: e.target.value as Currency }))}>
-                <option value="AED">AED</option>
-                <option value="INR">INR</option>
-              </Select>
-            </FormField>
+            {isDubai && (
+              <FormField label="Currency">
+                <Select value={invForm.currency} onChange={e => setInvForm(f => ({ ...f, currency: e.target.value as Currency }))}>
+                  <option value="AED">AED</option>
+                  <option value="INR">INR</option>
+                </Select>
+              </FormField>
+            )}
           </div>
           <FormField label="Name">
             <Input
@@ -749,12 +755,14 @@ export default function Investments() {
                   <Input type="number" min="0" step="0.01" value={txnForm.pricePerUnit} onChange={e => setTxnForm(f => ({ ...f, pricePerUnit: e.target.value }))} placeholder="0.00" />
                 </FormField>
               </div>
-              <FormField label="Currency">
-                <Select value={txnForm.currency} onChange={e => setTxnForm(f => ({ ...f, currency: e.target.value as Currency }))}>
-                  <option value="AED">AED</option>
-                  <option value="INR">INR</option>
-                </Select>
-              </FormField>
+              {isDubai && (
+                <FormField label="Currency">
+                  <Select value={txnForm.currency} onChange={e => setTxnForm(f => ({ ...f, currency: e.target.value as Currency }))}>
+                    <option value="AED">AED</option>
+                    <option value="INR">INR</option>
+                  </Select>
+                </FormField>
+              )}
               {Number(txnForm.units) > 0 && Number(txnForm.pricePerUnit) > 0 && (
                 <div className="p-3 rounded-lg bg-[#6366F1]/10 border border-[#6366F1]/20 text-sm">
                   <span className="text-[#6366F1] font-medium">
@@ -764,16 +772,18 @@ export default function Investments() {
               )}
             </>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className={isDubai ? 'grid grid-cols-2 gap-4' : ''}>
               <FormField label="Amount">
                 <Input type="number" min="0" step="0.01" value={txnForm.amount} onChange={e => setTxnForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
               </FormField>
-              <FormField label="Currency">
-                <Select value={txnForm.currency} onChange={e => setTxnForm(f => ({ ...f, currency: e.target.value as Currency }))}>
-                  <option value="AED">AED</option>
-                  <option value="INR">INR</option>
-                </Select>
-              </FormField>
+              {isDubai && (
+                <FormField label="Currency">
+                  <Select value={txnForm.currency} onChange={e => setTxnForm(f => ({ ...f, currency: e.target.value as Currency }))}>
+                    <option value="AED">AED</option>
+                    <option value="INR">INR</option>
+                  </Select>
+                </FormField>
+              )}
             </div>
           )}
           <FormField label="Notes">

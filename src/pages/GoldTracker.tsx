@@ -4,12 +4,13 @@ import { useAppStore, useGoldPurchases, useSettings } from '../stores/useAppStor
 import { GoldPurchase, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, Textarea, ConfirmDialog, EmptyState, StatCard } from '../components/ui';
 import { formatDate, formatCurrency, resolveAed, resolveInr } from '../utils';
+import { useIsDubai } from '../hooks';
 
-const defaultForm = (): Omit<GoldPurchase, 'id' | 'createdAt'> => ({
+const defaultForm = (currency: Currency): Omit<GoldPurchase, 'id' | 'createdAt'> => ({
   date: new Date().toISOString().split('T')[0],
   weightGrams: 0,
   pricePerGram: 0,
-  currency: 'AED',
+  currency,
   notes: '',
 });
 
@@ -19,11 +20,12 @@ export default function GoldTracker() {
   const purchases = useGoldPurchases();
   const { addGoldPurchase, updateGoldPurchase, deleteGoldPurchase } = useAppStore();
   const settings = useSettings();
+  const isDubai = useIsDubai();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState(defaultForm());
+  const [form, setForm] = useState(defaultForm(isDubai ? 'AED' : 'INR'));
 
   const stats = useMemo(() => {
     const totalWeight = purchases.reduce((s, p) => s + p.weightGrams, 0);
@@ -41,7 +43,7 @@ export default function GoldTracker() {
   const needMore = Math.max(0, GOLD_TARGET_GRAMS - stats.totalWeight);
   const pct = Math.min(100, (stats.totalWeight / GOLD_TARGET_GRAMS) * 100);
 
-  const openAdd = () => { setForm(defaultForm()); setEditId(null); setModalOpen(true); };
+  const openAdd = () => { setForm(defaultForm(isDubai ? 'AED' : 'INR')); setEditId(null); setModalOpen(true); };
   const openEdit = (p: GoldPurchase) => {
     setForm({ date: p.date, weightGrams: p.weightGrams, pricePerGram: p.pricePerGram, currency: p.currency, notes: p.notes });
     setEditId(p.id);
@@ -75,7 +77,7 @@ export default function GoldTracker() {
         <StatCard
           title="Total Value"
           value={formatCurrency(stats.totalValueInr, 'INR')}
-          sub={`≈ AED ${stats.totalValue.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+          sub={isDubai ? `≈ AED ${stats.totalValue.toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : undefined}
           icon={<Gem size={16} />}
           color="amber"
         />
@@ -156,12 +158,14 @@ export default function GoldTracker() {
             <FormField label="Weight (grams)">
               <Input type="number" min="0" step="0.0001" value={form.weightGrams || ''} onChange={e => setForm(f => ({ ...f, weightGrams: parseFloat(e.target.value) || 0 }))} placeholder="e.g. 1.8246" />
             </FormField>
-            <FormField label="Currency">
-              <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
-                <option value="AED">AED</option>
-                <option value="INR">INR</option>
-              </Select>
-            </FormField>
+            {isDubai && (
+              <FormField label="Currency">
+                <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
+                  <option value="AED">AED</option>
+                  <option value="INR">INR</option>
+                </Select>
+              </FormField>
+            )}
           </div>
           <FormField label="Price per Gram">
             <Input type="number" min="0" step="0.01" value={form.pricePerGram || ''} onChange={e => setForm(f => ({ ...f, pricePerGram: parseFloat(e.target.value) || 0 }))} placeholder="0.00" />

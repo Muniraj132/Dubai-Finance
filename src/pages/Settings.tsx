@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useAppStore, useSettings } from '../stores/useAppStore';
 import { PageHeader, FormField, Input, Button } from '../components/ui';
+import { useIsDubai } from '../hooks';
 
 export default function Settings () {
   const settings = useSettings();
   const updateSettings = useAppStore(s => s.updateSettings);
+  const isDubai = useIsDubai();
 
   const [rate, setRate] = useState(settings.aedToInrRate.toString());
   const [arrivalDate, setArrivalDate] = useState(settings.dubaiArrivalDate);
@@ -40,31 +42,44 @@ export default function Settings () {
     <div className="space-y-5 max-w-lg">
       <PageHeader title="Settings" subtitle="Configure your Dubai Finance Tracker" />
 
-      <div className="card space-y-4">
-        <h2 className="text-sm font-semibold text-primary">Exchange Rate</h2>
-        <FormField label="AED to INR Rate">
-          <Input
-            type="number"
-            value={rate}
-            onChange={e => setRate(e.target.value)}
-            placeholder="23"
-            step="0.01"
-          />
-        </FormField>
-        <p className="text-xs text-muted">Current: 1 AED = ₹{settings.aedToInrRate}. Update this manually to match current market rates.</p>
+      <div className="card space-y-2">
+        <h2 className="text-sm font-semibold text-primary">Account Type</h2>
+        <p className="text-xs text-muted">
+          {isDubai
+            ? 'Dubai — you work with both AED and INR everywhere.'
+            : 'India — you work with INR only. AED/Dubai-specific features are hidden.'}
+        </p>
       </div>
 
-      <div className="card space-y-4">
-        <h2 className="text-sm font-semibold text-primary">Dubai Journey</h2>
-        <FormField label="Dubai Arrival Date">
-          <Input
-            type="date"
-            value={arrivalDate}
-            onChange={e => setArrivalDate(e.target.value)}
-          />
-        </FormField>
-        <p className="text-xs text-muted">Used to calculate your days in Dubai on the Dubai Life page.</p>
-      </div>
+      {isDubai && (
+        <div className="card space-y-4">
+          <h2 className="text-sm font-semibold text-primary">Exchange Rate</h2>
+          <FormField label="AED to INR Rate">
+            <Input
+              type="number"
+              value={rate}
+              onChange={e => setRate(e.target.value)}
+              placeholder="23"
+              step="0.01"
+            />
+          </FormField>
+          <p className="text-xs text-muted">Current: 1 AED = ₹{settings.aedToInrRate}. Update this manually to match current market rates.</p>
+        </div>
+      )}
+
+      {isDubai && (
+        <div className="card space-y-4">
+          <h2 className="text-sm font-semibold text-primary">Dubai Journey</h2>
+          <FormField label="Dubai Arrival Date">
+            <Input
+              type="date"
+              value={arrivalDate}
+              onChange={e => setArrivalDate(e.target.value)}
+            />
+          </FormField>
+          <p className="text-xs text-muted">Used to calculate your days in Dubai on the Dubai Life page.</p>
+        </div>
+      )}
 
       <div className="card space-y-4">
         <h2 className="text-sm font-semibold text-primary">Theme</h2>

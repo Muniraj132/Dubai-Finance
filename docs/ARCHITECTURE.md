@@ -11,12 +11,14 @@ should be here.
 
 ## 1. What this app is
 
-A personal finance tracker for someone living/working in Dubai (AED) while
-their financial life partly stays in India (INR). It tracks expenses,
-income, savings goals, gold purchases, monthly budgets, investments (mutual
-funds, stocks, ETFs, fixed deposits, PPF, NPS, and other holdings — see
-§7.10), and "chit funds" (a rotating-savings-and-credit scheme common in
-India — see §7.6), and presents everything in both currencies.
+A personal finance tracker originally built for someone living/working in
+Dubai (AED) while their financial life partly stays in India (INR), and now
+also usable by India-based users who only need INR (see §7.12 for the
+`accountType` distinction). It tracks expenses, income, savings goals, gold
+purchases, monthly budgets, investments (mutual funds, stocks, ETFs, fixed
+deposits, PPF, NPS, and other holdings — see §7.10), and "chit funds" (a
+rotating-savings-and-credit scheme common in India — see §7.6), and, for
+Dubai users, presents everything in both currencies.
 Single-user-per-account: every table is scoped to `auth.uid()` via Postgres
 Row Level Security, so it's effectively "your own private ledger," not a
 shared household budget.
@@ -175,6 +177,7 @@ files:
 - `0006_investment_sip.sql` — adds SIP columns + a `pg_cron` job that auto-generates monthly SIP transactions (§7.10).
 - `0007_liabilities.sql` — adds `liabilities` (loans, credit cards, other debts), so Net Worth can subtract what you owe (§7.11).
 - `0008_liability_transactions.sql` — adds `liabilities."status"` and `liability_transactions` (a Charge/Payment ledger), so outstanding balance/principal paid/interest paid are derived instead of one manually-edited number (§7.11).
+- `0009_account_type.sql` — adds `settings."accountType"` (`'dubai' | 'india'`), chosen once at registration (§7.12).
 
 ### Tables
 
@@ -189,7 +192,7 @@ for `all` operations — i.e., a user can only ever see/modify their own rows.
 | `goals` | `name, targetAmount, currentAmount, targetDate, currency, color` + `targetAmountAed/Inr, currentAmountAed/Inr, exchangeRateUsed` | `currentAmount` is a running balance updated by "contribute funds," not a ledger of individual contributions |
 | `budgets` | `month (YYYY-MM), category, amount, currency` + `amountAed, amountInr, exchangeRateUsed` | One row per (month, category) — `setBudget` upserts by that composite key in application code, there's no DB unique constraint enforcing it |
 | `gold_purchases` | `date, weightGrams, pricePerGram, currency, notes` + `totalValueAed, totalValueInr, exchangeRateUsed` | "amount" is derived (`weightGrams * pricePerGram`); the snapshot columns store that derived total, not a raw input field |
-| `settings` | **one row per user**, `user_id` is the primary key | `aedToInrRate` (default 23), `dubaiArrivalDate`, `theme`, `currency`, `rateFetchedAt` |
+| `settings` | **one row per user**, `user_id` is the primary key | `aedToInrRate` (default 23), `dubaiArrivalDate`, `theme`, `currency`, `rateFetchedAt`, `accountType` (`'dubai'` default \| `'india'`, §7.12) |
 | `chit_funds` | `name, total_amount, duration_months, organizer, start_date, end_date, status, received_amount, received_month_no, notes` | No `currency` column — always implicitly INR (see §7.6) |
 | `chit_installments` | `chit_id (FK), month_no, due_date, amount, paid_amount, paid_date, payment_mode, status, remark` | Indexed on `chit_id`; deleting a chit fund cascades to its installments (`on delete cascade`, also mirrored in the optimistic client-side delete) |
 | `investments` | `type, name, currency, currentValue, maturityDate, interestRate, schemeCode, sipEnabled, sipAmount, sipDay, sipLastRunDate, status, notes` + `currentValueAed/Inr, exchangeRateUsed` | `currentValue` is normally a manually-updated mark-to-market figure, *except* for Mutual Funds linked to an AMFI `schemeCode`, which can refresh it live (see §7.10); `maturityDate`/`interestRate` are only meaningful for Fixed Deposit/PPF/NPS; `sip*` columns drive the recurring-SIP cron job (see §7.10) — `sipLastRunDate` is server-maintained, never written by the client except as `null` on create |
@@ -627,6 +630,57 @@ transactions (Bank↔Wallet, AED↔INR account). This app has no concept of
 "which account" a transaction belongs to today (only a `currency`), and
 Transfers only matter once multiple accounts exist — a materially bigger
 feature than this fix required.
+
+### 7.12 Account type: Dubai vs. India users
+
+This app was originally built for one persona (Indian expat in Dubai,
+AED+INR everywhere). Some users are India-based and only need INR, with none
+of the Dubai/AED machinery — `settings.accountType` (`'dubai' | 'india'`,
+`0009_account_type.sql`) captures which, chosen once via a radio button at
+registration (`src/pages/Auth.tsx`) and never editable afterward (switching
+would mean relabeling existing AED records, which is out of scope).
+
+**How the choice reaches the database without a Postgres trigger.** This
+project has no server code of its own (§2), so instead of an
+`on_auth_user_created` trigger, `useAuthStore.signUp` passes the chosen
+`accountType` as Supabase Auth signup metadata
+(`options.data.accountType`) — set immediately, even before email
+confirmation. `useAppStore.initialize()` reads it back on the very first
+load: if no `settings` row exists yet for this user, one is created
+immediately with the right `accountType` (rather than waiting for whatever
+else happens to call `updateSettings` first, e.g. the exchange-rate
+refresh in §8). Every *pre-existing* settings row (including accounts that
+existed before this feature shipped) gets `accountType = 'dubai'` for free,
+from the migration's column default — no seeding logic needed for those.
+
+**Nothing about currency math changed.** Every calculation function in
+`src/utils/index.ts` (§7.1, §7.11) already branches on each record's own
+`currency` field and uses the raw amount whenever `currency === 'INR'` — an
+India user's records are always `currency: 'INR'`, so those functions
+produce correct figures with zero modification. This feature is UI-gating
+only: a shared hook, `useIsDubai()` (`src/hooks/index.ts`), is `false` for
+`accountType === 'india'`, and every page reads it to:
+
+- Hide the AED/INR currency `<Select>` in every form (Expenses, Income,
+  Goals, Gold Tracker, Budget Planner, Investments, Liabilities) and default
+  new records to `currency: 'INR'` instead of `'AED'`.
+- Suppress the "≈ AED X" secondary figure shown next to INR totals
+  everywhere (Dashboard, Analytics, Investments, Liabilities, Gold Tracker,
+  Budget Planner, Income) and drop the `AmountAED`-style columns from CSV
+  exports (`Reports.tsx`).
+- Hide `/converter` and `/dubai-life` from the sidebar entirely (both pages
+  also self-guard with a redirect to `/`, in case of direct URL navigation)
+  and skip the exchange-rate auto-refresh network call (§8) — there's
+  nothing for an India user to convert.
+- Hide the Exchange Rate / Dubai Journey cards in Settings.
+
+**`Budget Planner` is the one place internal math (not just display)
+changes.** It used to normalize every figure to AED via `resolveAed` purely
+to compare budget vs. spend — for an India user that would show a
+rate-divided, meaningless AED-denominated number. It now normalizes to
+whichever currency matches the account type (`resolveAed` for Dubai,
+`resolveInr` for India) via a small local `nativeValue`/`formatNative`
+helper in `BudgetPlanner.tsx`.
 
 ## 8. Exchange rate refresh (`src/utils/exchangeRate.ts`)
 

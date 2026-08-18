@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
   currency: 'AED',
   rateFetchedAt: null,
+  accountType: 'dubai',
 };
 
 export interface Toast {
@@ -169,6 +170,23 @@ export const useAppStore = create<AppState>()((set, get) => {
         supabase.from('liability_transactions').select('*').order('date', { ascending: false }),
         supabase.from('settings').select('*').maybeSingle(),
       ]);
+      // A brand-new user has no `settings` row yet (one is normally only
+      // created lazily, by the first updateSettings() call — see below).
+      // Seed it immediately from the accountType chosen at registration
+      // (stored on the auth user's metadata by useAuthStore.signUp), so an
+      // India user's very first load already has `accountType: 'india'` in
+      // the DB rather than defaulting to Dubai until something else happens
+      // to write the row.
+      let resolvedSettings = settings.data;
+      if (!resolvedSettings) {
+        const authUser = useAuthStore.getState().user;
+        const accountType = (authUser?.user_metadata?.accountType as AppSettings['accountType']) ?? 'dubai';
+        resolvedSettings = { ...DEFAULT_SETTINGS, accountType };
+        if (authUser) {
+          supabase.from('settings').upsert({ user_id: authUser.id, ...resolvedSettings });
+        }
+      }
+
       set({
         expenses: expenses.data ?? [],
         incomes: incomes.data ?? [],
@@ -181,7 +199,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         investmentTransactions: investmentTransactions.data ?? [],
         liabilities: liabilities.data ?? [],
         liabilityTransactions: liabilityTransactions.data ?? [],
-        settings: settings.data ?? DEFAULT_SETTINGS,
+        settings: resolvedSettings,
         isLoading: false,
       });
     },

@@ -3,31 +3,45 @@ import { Plus, Wallet } from 'lucide-react';
 import { useAppStore, useBudgets, useExpenses, useSettings } from '../stores/useAppStore';
 import { ExpenseCategory, Currency } from '../types';
 import { PageHeader, Button, Modal, FormField, Input, Select, EmptyState } from '../components/ui';
-import { EXPENSE_CATEGORIES, CATEGORY_COLORS, getCurrentMonthKey, getMonthKey, resolveAed } from '../utils';
+import { EXPENSE_CATEGORIES, CATEGORY_COLORS, getCurrentMonthKey, getMonthKey, resolveAed, resolveInr } from '../utils';
+import { useIsDubai } from '../hooks';
 
 export default function BudgetPlanner() {
   const budgets = useBudgets();
   const expenses = useExpenses();
   const { setBudget, deleteBudget } = useAppStore();
   const settings = useSettings();
+  const isDubai = useIsDubai();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthKey());
-  const [form, setForm] = useState({ category: 'Food' as ExpenseCategory, amount: 0, currency: 'AED' as Currency });
+  const [form, setForm] = useState({ category: 'Food' as ExpenseCategory, amount: 0, currency: (isDubai ? 'AED' : 'INR') as Currency });
 
   const monthBudgets = useMemo(() =>
     budgets.filter(b => b.month === selectedMonth),
     [budgets, selectedMonth]
   );
 
+  // India users only ever have INR-currency records — comparing budget vs.
+  // spend natively in INR (instead of normalizing everything to AED, which
+  // would show a meaningless AED/rate-scaled figure to a user who never
+  // deals in AED).
+  const nativeValue = (amount: number, currency: Currency, aedSnapshot: number | null | undefined, inrSnapshot: number | null | undefined) =>
+    isDubai
+      ? resolveAed(amount, currency, aedSnapshot, settings.aedToInrRate)
+      : resolveInr(amount, currency, inrSnapshot, settings.aedToInrRate);
+  const formatNative = (v: number) => isDubai
+    ? `AED ${v.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`
+    : `₹${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+
   const monthExpenses = useMemo(() => {
     const map = new Map<string, number>();
     expenses.filter(e => getMonthKey(e.date) === selectedMonth).forEach(e => {
-      const amt = resolveAed(e.amount, e.currency, e.amountAed, settings.aedToInrRate);
+      const amt = nativeValue(e.amount, e.currency, e.amountAed, e.amountInr);
       map.set(e.category, (map.get(e.category) ?? 0) + amt);
     });
     return map;
-  }, [expenses, selectedMonth, settings.aedToInrRate]);
+  }, [expenses, selectedMonth, settings.aedToInrRate, isDubai]);
 
   const handleSave = () => {
     if (!form.amount) return;
@@ -47,14 +61,14 @@ export default function BudgetPlanner() {
     return list;
   }, []);
 
-  const totalBudget = monthBudgets.reduce((s, b) => s + resolveAed(b.amount, b.currency, b.amountAed, settings.aedToInrRate), 0);
+  const totalBudget = monthBudgets.reduce((s, b) => s + nativeValue(b.amount, b.currency, b.amountAed, b.amountInr), 0);
   const totalSpent = Array.from(monthExpenses.values()).reduce((s, v) => s + v, 0);
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Budget Planner"
-        subtitle={`Total budget: AED ${totalBudget.toLocaleString('en-AE', { maximumFractionDigits: 0 })} · Spent: AED ${totalSpent.toLocaleString('en-AE', { maximumFractionDigits: 0 })}`}
+        subtitle={`Total budget: ${formatNative(totalBudget)} · Spent: ${formatNative(totalSpent)}`}
         action={<Button onClick={() => setModalOpen(true)}><Plus size={16} /> Set Budget</Button>}
       />
 
@@ -73,10 +87,10 @@ export default function BudgetPlanner() {
       ) : (
         <div className="space-y-3">
           {monthBudgets.map(budget => {
-            const budgetAED = resolveAed(budget.amount, budget.currency, budget.amountAed, settings.aedToInrRate);
+            const budgetNative = nativeValue(budget.amount, budget.currency, budget.amountAed, budget.amountInr);
             const spent = monthExpenses.get(budget.category) ?? 0;
-            const pct = budgetAED > 0 ? (spent / budgetAED) * 100 : 0;
-            const remaining = budgetAED - spent;
+            const pct = budgetNative > 0 ? (spent / budgetNative) * 100 : 0;
+            const remaining = budgetNative - spent;
             const isOver = pct >= 100;
             const isNear = pct >= 80 && pct < 100;
 
@@ -119,10 +133,10 @@ export default function BudgetPlanner() {
 
                 <div className="flex justify-between text-xs">
                   <span className="text-muted">
-                    Spent: <span className="text-primary font-medium">AED {spent.toLocaleString('en-AE', { maximumFractionDigits: 0 })}</span>
+                    Spent: <span className="text-primary font-medium">{formatNative(spent)}</span>
                   </span>
                   <span className={remaining < 0 ? 'text-red-700 dark:text-red-400 font-medium' : 'text-muted'}>
-                    {remaining < 0 ? `Over by AED ${Math.abs(remaining).toLocaleString('en-AE', { maximumFractionDigits: 0 })}` : `AED ${remaining.toLocaleString('en-AE', { maximumFractionDigits: 0 })} left`}
+                    {remaining < 0 ? `Over by ${formatNative(Math.abs(remaining))}` : `${formatNative(remaining)} left`}
                   </span>
                 </div>
               </div>
@@ -138,16 +152,18 @@ export default function BudgetPlanner() {
               {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </Select>
           </FormField>
-          <div className="grid grid-cols-2 gap-4">
+          <div className={isDubai ? 'grid grid-cols-2 gap-4' : ''}>
             <FormField label="Amount">
               <Input type="number" min="0" value={form.amount || ''} onChange={e => setForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} placeholder="0.00" />
             </FormField>
-            <FormField label="Currency">
-              <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
-                <option value="AED">AED</option>
-                <option value="INR">INR</option>
-              </Select>
-            </FormField>
+            {isDubai && (
+              <FormField label="Currency">
+                <Select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value as Currency }))}>
+                  <option value="AED">AED</option>
+                  <option value="INR">INR</option>
+                </Select>
+              </FormField>
+            )}
           </div>
           <p className="text-xs text-muted">This will set the budget for <span className="text-primary font-medium">{form.category}</span> in <span className="text-primary font-medium">{selectedMonth}</span>.</p>
           <div className="flex justify-end gap-3 pt-2">
