@@ -1,17 +1,17 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
   ArrowLeft, Plus, Edit2, Trash2, LineChart, Wallet,
-  TrendingUp, TrendingDown, Coins, PiggyBank, RefreshCw, X,
+  TrendingUp, TrendingDown, Coins, PiggyBank, RefreshCw, X, Repeat,
 } from 'lucide-react';
 import { useAppStore, useInvestments, useInvestmentTransactions, useSettings } from '../stores/useAppStore';
 import { Investment, InvestmentTransaction, InvestmentType, InvestmentStatus, InvestmentTxnType, Currency } from '../types';
 import {
   PageHeader, Button, Modal, FormField, Input, Select, Textarea,
-  ConfirmDialog, EmptyState, StatCard, Badge,
+  ConfirmDialog, EmptyState, StatCard, Badge, FilterTabs,
 } from '../components/ui';
 import {
   formatDate, formatCurrency, convertToAED, computeInvestmentStats, computePortfolioStats, groupByInvestmentId,
-  INVESTMENT_TYPES, INVESTMENT_TYPE_BADGE,
+  computeSipStats, isSipHolding, INVESTMENT_TYPES, INVESTMENT_TYPE_BADGE,
 } from '../utils';
 import { searchMfSchemes, fetchLatestNav, MfSchemeSearchResult } from '../utils/mfNav';
 import { useIsDubai } from '../hooks';
@@ -22,6 +22,8 @@ const TXN_TYPE_BADGE: Record<InvestmentTxnType, string> = { Buy: 'green', SIP: '
 // Mutual Funds/Stocks/ETFs move in units/NAV; FDs/PPF/NPS are just cash in and out.
 const isUnitBased = (type: InvestmentType) => type === 'Mutual Fund' || type === 'Stock' || type === 'ETF';
 const isFixedIncome = (type: InvestmentType) => type === 'Fixed Deposit' || type === 'PPF' || type === 'NPS';
+
+type SipFilter = 'all' | 'sip' | 'other';
 
 type InvestmentForm = {
   type: InvestmentType;
@@ -85,6 +87,8 @@ export default function Investments() {
   const isDubai = useIsDubai();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [holdingFilter, setHoldingFilter] = useState<SipFilter>('all');
+  const [txnFilter, setTxnFilter] = useState<SipFilter>('all');
 
   // Investment modals
   const [invModal, setInvModal] = useState(false);
@@ -137,6 +141,33 @@ export default function Investments() {
     computeInvestmentStats(inv, txnsByInvestmentId.get(inv.id) ?? [], aedToInrRate);
 
   const detailStats = selectedInvestment ? statsFor(selectedInvestment) : null;
+
+  const sipStats = useMemo(
+    () => computeSipStats(investments, transactions, aedToInrRate),
+    [investments, transactions, aedToInrRate],
+  );
+
+  const sipHoldingIds = useMemo(
+    () => new Set(investments.filter(isSipHolding).map(inv => inv.id)),
+    [investments],
+  );
+
+  const filteredInvestments = useMemo(() => {
+    if (holdingFilter === 'all') return investments;
+    return investments.filter(inv => sipHoldingIds.has(inv.id) === (holdingFilter === 'sip'));
+  }, [investments, holdingFilter, sipHoldingIds]);
+
+  const sipTxnCount = selectedTransactions.filter(t => t.type === 'SIP').length;
+
+  const filteredTransactions = useMemo(() => {
+    if (txnFilter === 'all') return selectedTransactions;
+    return selectedTransactions.filter(t => (t.type === 'SIP') === (txnFilter === 'sip'));
+  }, [selectedTransactions, txnFilter]);
+
+  const openDetail = (id: string) => {
+    setTxnFilter('all');
+    setSelectedId(id);
+  };
 
   // Debounced AMFI scheme search as the user types in the "link a fund" field.
   useEffect(() => {
@@ -336,7 +367,7 @@ export default function Investments() {
             }
           />
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
             <StatCard
               title="Total Invested"
               value={formatCurrency(portfolioStats.investedInr, 'INR')}
@@ -367,6 +398,15 @@ export default function Investments() {
               icon={<Coins size={16} />}
               color="amber"
             />
+            <StatCard
+              title="SIP Total"
+              value={formatCurrency(sipStats.totalInr, 'INR')}
+              sub={sipStats.activeCount > 0
+                ? `${sipStats.activeCount} active · ${formatCurrency(sipStats.monthlyInr, 'INR')}/mo`
+                : 'No active SIPs'}
+              icon={<Repeat size={16} />}
+              color="indigo"
+            />
           </div>
 
           {investments.length === 0 ? (
@@ -376,61 +416,82 @@ export default function Investments() {
               description="Track mutual funds, stocks, ETFs, fixed deposits, PPF, NPS and more."
             />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {investments.map(inv => {
-                const s = statsFor(inv);
-                return (
-                  <div key={inv.id} className="card group flex flex-col gap-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-semibold text-primary text-sm break-words">{inv.name}</h3>
-                          {inv.status === 'closed' && <Badge color={STATUS_BADGE[inv.status]}>closed</Badge>}
+            <>
+              <FilterTabs
+                value={holdingFilter}
+                onChange={setHoldingFilter}
+                tabs={[
+                  { value: 'all', label: 'All', count: investments.length },
+                  { value: 'sip', label: 'SIP', count: sipHoldingIds.size },
+                  { value: 'other', label: 'Other Investments', count: investments.length - sipHoldingIds.size },
+                ]}
+              />
+              {filteredInvestments.length === 0 ? (
+                <EmptyState
+                  icon={<Repeat size={40} />}
+                  title={holdingFilter === 'sip' ? 'No SIP investments' : 'No other investments'}
+                  description={holdingFilter === 'sip'
+                    ? 'Set a Mutual Fund\'s Investment Mode to SIP (edit the holding) and it will show up here.'
+                    : 'Every holding you have is a SIP. Lumpsum investments, stocks, FDs and others will show up here.'}
+                />
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {filteredInvestments.map(inv => {
+                    const s = statsFor(inv);
+                    return (
+                      <div key={inv.id} className="card group flex flex-col gap-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-semibold text-primary text-sm break-words">{inv.name}</h3>
+                              {inv.status === 'closed' && <Badge color={STATUS_BADGE[inv.status]}>closed</Badge>}
+                            </div>
+                            <p className="text-xs mt-0.5 flex items-center gap-1.5 flex-wrap">
+                              <Badge color={INVESTMENT_TYPE_BADGE[inv.type]}>{inv.type}</Badge>
+                              {inv.sipEnabled && <Badge color="blue">SIP · Day {inv.sipDay}</Badge>}
+                            </p>
+                          </div>
+                          {/* Always visible on mobile (no hover to reveal on touch); hover-reveal kicks in from sm: up. */}
+                          <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
+                            <button onClick={() => openEditInvestment(inv)} className="p-1 text-muted hover:text-primary"><Edit2 size={12} /></button>
+                            <button onClick={() => setDeleteInvId(inv.id)} className="p-1 text-muted hover:text-red-400"><Trash2 size={12} /></button>
+                          </div>
                         </div>
-                        <p className="text-xs mt-0.5 flex items-center gap-1.5 flex-wrap">
-                          <Badge color={INVESTMENT_TYPE_BADGE[inv.type]}>{inv.type}</Badge>
-                          {inv.sipEnabled && <Badge color="blue">SIP · Day {inv.sipDay}</Badge>}
-                        </p>
-                      </div>
-                      {/* Always visible on mobile (no hover to reveal on touch); hover-reveal kicks in from sm: up. */}
-                      <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0">
-                        <button onClick={() => openEditInvestment(inv)} className="p-1 text-muted hover:text-primary"><Edit2 size={12} /></button>
-                        <button onClick={() => setDeleteInvId(inv.id)} className="p-1 text-muted hover:text-red-400"><Trash2 size={12} /></button>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <p className="text-muted">Invested</p>
-                        <p className="text-primary font-semibold">{formatCurrency(inv.currency === 'AED' ? s.investedAed : s.investedInr, inv.currency)}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted">Current Value</p>
-                        <p className="text-primary font-semibold">{formatCurrency(inv.currency === 'AED' ? s.currentValueAed : s.currentValueInr, inv.currency)}</p>
-                      </div>
-                    </div>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <p className="text-muted">Invested</p>
+                            <p className="text-primary font-semibold">{formatCurrency(inv.currency === 'AED' ? s.investedAed : s.investedInr, inv.currency)}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted">Current Value</p>
+                            <p className="text-primary font-semibold">{formatCurrency(inv.currency === 'AED' ? s.currentValueAed : s.currentValueInr, inv.currency)}</p>
+                          </div>
+                        </div>
 
-                    <div className={`flex items-center justify-between text-xs rounded-lg px-3 py-2 ${s.gainAed >= 0 ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
-                      <span className={s.gainAed >= 0 ? 'text-green-400' : 'text-red-400'}>
-                        {s.gainAed >= 0 ? <TrendingUp size={12} className="inline mr-1" /> : <TrendingDown size={12} className="inline mr-1" />}
-                        {s.gainAed >= 0 ? 'Gain' : 'Loss'}
-                      </span>
-                      <span className={`font-semibold ${s.gainAed >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {s.gainPct >= 0 ? '+' : ''}{s.gainPct.toFixed(1)}%
-                      </span>
-                    </div>
+                        <div className={`flex items-center justify-between text-xs rounded-lg px-3 py-2 ${s.gainAed >= 0 ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                          <span className={s.gainAed >= 0 ? 'text-green-400' : 'text-red-400'}>
+                            {s.gainAed >= 0 ? <TrendingUp size={12} className="inline mr-1" /> : <TrendingDown size={12} className="inline mr-1" />}
+                            {s.gainAed >= 0 ? 'Gain' : 'Loss'}
+                          </span>
+                          <span className={`font-semibold ${s.gainAed >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {s.gainPct >= 0 ? '+' : ''}{s.gainPct.toFixed(1)}%
+                          </span>
+                        </div>
 
-                    <Button
-                      variant="secondary"
-                      className="w-full text-xs py-1.5 mt-auto"
-                      onClick={() => setSelectedId(inv.id)}
-                    >
-                      View Transactions →
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
+                        <Button
+                          variant="secondary"
+                          className="w-full text-xs py-1.5 mt-auto"
+                          onClick={() => openDetail(inv.id)}
+                        >
+                          View Transactions →
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </>
       )}
@@ -521,46 +582,67 @@ export default function Investments() {
               description="Record a Buy, SIP, Sell, or Dividend to start the ledger for this holding."
             />
           ) : (
-            <div className="card overflow-hidden p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-card-border">
-                      <th className="text-left text-xs text-muted font-medium px-4 py-3">Date</th>
-                      <th className="text-left text-xs text-muted font-medium px-4 py-3">Type</th>
-                      <th className="text-right text-xs text-muted font-medium px-4 py-3 hidden md:table-cell">Units</th>
-                      <th className="text-right text-xs text-muted font-medium px-4 py-3 hidden md:table-cell">Price/Unit</th>
-                      <th className="text-right text-xs text-muted font-medium px-4 py-3">Amount</th>
-                      <th className="text-left text-xs text-muted font-medium px-4 py-3 hidden lg:table-cell">Notes</th>
-                      <th className="px-4 py-3" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedTransactions.map((t, idx) => (
-                      <tr
-                        key={t.id}
-                        className={`border-b border-card-border last:border-0 hover:bg-white/[0.03] transition-colors group ${idx % 2 === 1 ? 'bg-white/[0.015]' : ''}`}
-                      >
-                        <td className="px-4 py-3 text-muted text-xs">{formatDate(t.date)}</td>
-                        <td className="px-4 py-3"><Badge color={TXN_TYPE_BADGE[t.type]}>{t.type}</Badge></td>
-                        <td className="px-4 py-3 text-right text-xs text-primary hidden md:table-cell">{t.units != null ? t.units.toFixed(4) : '—'}</td>
-                        <td className="px-4 py-3 text-right text-xs text-primary hidden md:table-cell">{t.pricePerUnit != null ? t.pricePerUnit.toLocaleString() : '—'}</td>
-                        <td className={`px-4 py-3 text-right text-xs font-semibold ${t.type === 'Sell' || t.type === 'Dividend' ? 'text-green-400' : 'text-primary'}`}>
-                          {t.currency} {t.amount.toLocaleString('en-AE', { maximumFractionDigits: 2 })}
-                        </td>
-                        <td className="px-4 py-3 text-muted text-xs hidden lg:table-cell max-w-[160px] truncate">{t.notes || '—'}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex gap-1 justify-end opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => openEditTxn(t)} className="p-1 text-muted hover:text-primary"><Edit2 size={12} /></button>
-                            <button onClick={() => setDeleteTxnId(t.id)} className="p-1 text-muted hover:text-red-400"><Trash2 size={12} /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <>
+              <FilterTabs
+                value={txnFilter}
+                onChange={setTxnFilter}
+                tabs={[
+                  { value: 'all', label: 'All', count: selectedTransactions.length },
+                  { value: 'sip', label: 'SIP', count: sipTxnCount },
+                  { value: 'other', label: 'Buy / Sell / Dividend', count: selectedTransactions.length - sipTxnCount },
+                ]}
+              />
+              {filteredTransactions.length === 0 ? (
+                <EmptyState
+                  icon={<Repeat size={40} />}
+                  title={txnFilter === 'sip' ? 'No SIP transactions' : 'No other transactions'}
+                  description={txnFilter === 'sip'
+                    ? 'SIP entries appear here — added by hand, or automatically each month if auto-SIP is on.'
+                    : 'Buy, Sell and Dividend entries for this holding will appear here.'}
+                />
+              ) : (
+                <div className="card overflow-hidden p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-card-border">
+                          <th className="text-left text-xs text-muted font-medium px-4 py-3">Date</th>
+                          <th className="text-left text-xs text-muted font-medium px-4 py-3">Type</th>
+                          <th className="text-right text-xs text-muted font-medium px-4 py-3 hidden md:table-cell">Units</th>
+                          <th className="text-right text-xs text-muted font-medium px-4 py-3 hidden md:table-cell">Price/Unit</th>
+                          <th className="text-right text-xs text-muted font-medium px-4 py-3">Amount</th>
+                          <th className="text-left text-xs text-muted font-medium px-4 py-3 hidden lg:table-cell">Notes</th>
+                          <th className="px-4 py-3" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredTransactions.map((t, idx) => (
+                          <tr
+                            key={t.id}
+                            className={`border-b border-card-border last:border-0 hover:bg-white/[0.03] transition-colors group ${idx % 2 === 1 ? 'bg-white/[0.015]' : ''}`}
+                          >
+                            <td className="px-4 py-3 text-muted text-xs">{formatDate(t.date)}</td>
+                            <td className="px-4 py-3"><Badge color={TXN_TYPE_BADGE[t.type]}>{t.type}</Badge></td>
+                            <td className="px-4 py-3 text-right text-xs text-primary hidden md:table-cell">{t.units != null ? t.units.toFixed(4) : '—'}</td>
+                            <td className="px-4 py-3 text-right text-xs text-primary hidden md:table-cell">{t.pricePerUnit != null ? t.pricePerUnit.toLocaleString() : '—'}</td>
+                            <td className={`px-4 py-3 text-right text-xs font-semibold ${t.type === 'Sell' || t.type === 'Dividend' ? 'text-green-400' : 'text-primary'}`}>
+                              {t.currency} {t.amount.toLocaleString('en-AE', { maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-4 py-3 text-muted text-xs hidden lg:table-cell max-w-[160px] truncate">{t.notes || '—'}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-1 justify-end opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => openEditTxn(t)} className="p-1 text-muted hover:text-primary"><Edit2 size={12} /></button>
+                                <button onClick={() => setDeleteTxnId(t.id)} className="p-1 text-muted hover:text-red-400"><Trash2 size={12} /></button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

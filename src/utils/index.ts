@@ -514,6 +514,43 @@ export const computePortfolioStats = (
   return { ...totals, gainPct };
 };
 
+// A holding is "SIP" only when it's set up as one (Investment Mode = SIP,
+// the "SIP · Day N" badge). A SIP-type transaction logged by hand on a PPF
+// or lumpsum fund doesn't make that holding a SIP (§7.10).
+export const isSipHolding = (investment: Investment): boolean => investment.sipEnabled;
+
+export interface SipStats {
+  totalAed: number;
+  totalInr: number;
+  activeCount: number;
+  monthlyAed: number;
+  monthlyInr: number;
+}
+
+// totalAed/Inr sum the SIP transactions of SIP holdings only, so the card
+// matches what the SIP filter tab lists (frozen snapshot values, §7.1). monthlyAed/Inr is the forward-looking commitment of active
+// auto-SIPs — not a stored record, so it converts at today's rate.
+export const computeSipStats = (
+  investments: Investment[],
+  transactions: InvestmentTransaction[],
+  rate: number
+): SipStats => {
+  let totalAed = 0, totalInr = 0, activeCount = 0, monthlyAed = 0, monthlyInr = 0;
+  const sipIds = new Set(investments.filter(isSipHolding).map(inv => inv.id));
+  transactions.forEach(t => {
+    if (t.type !== 'SIP' || !sipIds.has(t.investment_id)) return;
+    totalAed += resolveAed(t.amount, t.currency, t.amountAed, rate);
+    totalInr += resolveInr(t.amount, t.currency, t.amountInr, rate);
+  });
+  investments.forEach(inv => {
+    if (!inv.sipEnabled || inv.status !== 'active') return;
+    activeCount++;
+    monthlyAed += convertToAED(inv.sipAmount ?? 0, inv.currency, rate);
+    monthlyInr += convertToINR(inv.sipAmount ?? 0, inv.currency, rate);
+  });
+  return { totalAed, totalInr, activeCount, monthlyAed, monthlyInr };
+};
+
 export interface WelcomeInsight {
   emoji: string;
   message: string;

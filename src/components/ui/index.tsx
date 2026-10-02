@@ -151,6 +151,38 @@ export const Badge = ({ children, color = 'theme' }: { children: ReactNode; colo
   );
 };
 
+// FilterTabs — segmented control for switching a list between subsets.
+// Scrolls horizontally instead of wrapping on narrow screens.
+export const FilterTabs = <T extends string>({
+  tabs, value, onChange,
+}: {
+  tabs: { value: T; label: string; count?: number }[];
+  value: T;
+  onChange: (value: T) => void;
+}) => (
+  <div role="tablist" className="inline-flex max-w-full overflow-x-auto gap-1 p-1 bg-white/5 rounded-lg">
+    {tabs.map(tab => {
+      const active = tab.value === value;
+      return (
+        <button
+          key={tab.value}
+          role="tab"
+          aria-selected={active}
+          onClick={() => onChange(tab.value)}
+          className={`flex items-center gap-2 whitespace-nowrap px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+            active ? 'bg-[#6366F1] text-white shadow-sm shadow-[#6366F1]/30' : 'text-muted hover:text-primary'
+          }`}
+        >
+          {tab.label}
+          {tab.count !== undefined && (
+            <span className={`text-xs px-1.5 rounded-full ${active ? 'bg-white/20' : 'bg-white/10'}`}>{tab.count}</span>
+          )}
+        </button>
+      );
+    })}
+  </div>
+);
+
 // ProgressBar
 export const ProgressBar = ({ value, color = '#6366F1', showLabel = true }: { value: number; color?: string; showLabel?: boolean }) => {
   const pct = Math.min(100, Math.max(0, value));

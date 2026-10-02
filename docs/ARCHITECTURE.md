@@ -451,6 +451,17 @@ including why it's *not* simply "savings + gold + investments." `DubaiLife.tsx`'
 lifetime-aggregate section and `Analytics.tsx`'s portfolio allocation
 chart both read through `computePortfolioStats` the same way.
 
+**SIP card and filter tabs.** The list view has a "SIP Total" stat card
+(`computeSipStats`: the sum of the frozen INR values of SIP holdings' `SIP` transactions,
+plus a "N active · ₹X/mo" sub-line for active auto-SIPs, converted at
+today's rate since it's a forward-looking commitment, not a record). The list
+view's All / SIP / Other Investments tabs filter holdings: a holding counts as
+SIP (`isSipHolding`) only when `sipEnabled` is on, which matches the
+"SIP · Day N" badge. A SIP transaction logged by hand on a PPF or lumpsum
+fund keeps that holding under Other Investments. The detail ledger's
+All / SIP / Buy·Sell·Dividend tabs filter by transaction type. The other
+stat cards always show the whole portfolio, whichever tab is selected.
+
 **SIP automation is the one place this app runs code outside the browser.**
 Every other periodic thing in this app (the exchange rate, live NAV) is
 "check staleness and act, but only when someone has the app open." A real
@@ -711,7 +722,8 @@ Function + Supabase Cron, which was considered and deliberately deferred
 One flat file exporting every shared primitive: `Card`, `StatCard`,
 `Modal`, `FormField`, `Input`, `Select`, `Textarea`, `Button` (variants:
 `primary | secondary | danger | ghost`), `Badge`, `ProgressBar`,
-`EmptyState`, `PageHeader`, `ConfirmDialog`. There's no component library
+`EmptyState`, `PageHeader`, `ConfirmDialog`, `FilterTabs` (a segmented
+tab control with optional per-tab counts). There's no component library
 dependency (no shadcn/Radix/MUI) — everything is hand-rolled Tailwind
 markup. New UI patterns should be added here rather than inlined
 per-page, to keep the visual language consistent.
