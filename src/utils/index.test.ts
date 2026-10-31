@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { convertToAED, convertToINR, getMonthKey, computeSipStats, isSipHolding } from './index';
+import { convertToAED, convertToINR, getMonthKey, computeSipStats, isSipHolding, normalizeUrl } from './index';
 import type { Investment, InvestmentTransaction } from '../types';
 
 describe('currency conversion', () => {
@@ -67,5 +67,23 @@ describe('computeSipStats', () => {
     ], [], 23);
     expect(stats.activeCount).toBe(2);
     expect(stats.monthlyInr).toBe(7300);
+  });
+});
+
+describe('normalizeUrl', () => {
+  it('keeps full http(s) URLs, including long query strings', () => {
+    expect(normalizeUrl('https://laravel.com/docs/authentication')).toBe('https://laravel.com/docs/authentication');
+    expect(normalizeUrl('http://x.io/a?token=abc&next=%2Fhome')).toBe('http://x.io/a?token=abc&next=%2Fhome');
+  });
+
+  it('adds https:// when the scheme is missing', () => {
+    expect(normalizeUrl('  laravel.com/docs  ')).toBe('https://laravel.com/docs');
+    expect(normalizeUrl('localhost:3000/admin')).toBe('https://localhost:3000/admin');
+  });
+
+  it('rejects empty input and non-http(s) schemes', () => {
+    expect(normalizeUrl('')).toBeNull();
+    expect(normalizeUrl('javascript:alert(1)')).toBeNull();
+    expect(normalizeUrl('ftp://files.example.com')).toBeNull();
   });
 });

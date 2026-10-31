@@ -24,6 +24,7 @@ const DubaiLife = lazy(() => import('./pages/DubaiLife'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Settings = lazy(() => import('./pages/Settings'));
 const ChitFunds = lazy(() => import('./pages/ChitFund'));
+const UsefulLinks = lazy(() => import('./pages/UsefulLinks'));
 
 const RouteFallback = () => (
   <div className="min-h-screen bg-main flex items-center justify-center">
@@ -88,6 +89,7 @@ function AppContent() {
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/chit-funds" element={<ChitFunds />} />
+          <Route path="/links" element={<UsefulLinks />} />
         </Route>
       </Routes>
     </Suspense>

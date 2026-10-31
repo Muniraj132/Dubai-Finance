@@ -3,7 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   LayoutDashboard, CreditCard, TrendingUp, Target, Gem, BarChart3,
   Wallet, Download, Sun, Moon, Calculator, Palmtree, Settings, Menu, X,
-  ChevronRight, User, LogOut, IndianRupee, LineChart, Scale,
+  ChevronRight, User, LogOut, IndianRupee, LineChart, Scale, Link2,
 } from 'lucide-react';
 import { useAppStore, useSettings } from '../../stores/useAppStore';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -24,6 +24,7 @@ const navItems = [
   { to: '/converter', icon: Calculator, label: 'AED → INR' },
   { to: '/dubai-life', icon: Palmtree, label: 'Dubai Life' },
   { to: '/chit-funds', icon: IndianRupee, label: 'Chit Funds' },
+  { to: '/links', icon: Link2, label: 'Useful Links' },
   { to: '/reports', icon: Download, label: 'Reports' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
@@ -165,7 +166,23 @@ export default function Layout() {
         </header>
 
         {/* Live clock — visible on every page, every breakpoint */}
-        <div className="flex items-center justify-end px-4 md:px-6 lg:px-8 py-2 border-b border-card-border bg-main">
+        <div className="flex items-center justify-end gap-3 px-4 md:px-6 lg:px-8 py-2 border-b border-card-border bg-main">
+          {/* Quick access to the AED → INR converter (Dubai only, same as its nav item) */}
+          {isDubai && (
+            <NavLink
+              to="/converter"
+              title="AED → INR Converter"
+              aria-label="AED → INR Converter"
+              className={({ isActive }) => `
+                w-8 h-8 rounded-lg flex items-center justify-center transition-colors
+                ${isActive
+                  ? 'bg-[#6366F1]/15 text-[#6366F1]'
+                  : 'text-muted hover:text-primary hover:bg-[#6366F1]/10'}
+              `}
+            >
+              <Calculator size={16} />
+            </NavLink>
+          )}
           <LiveClock />
         </div>
 

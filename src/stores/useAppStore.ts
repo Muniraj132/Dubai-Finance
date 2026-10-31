@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../utils/supabase';
 import { useAuthStore } from './useAuthStore';
-import { Expense, Income, Goal, Budget, GoldPurchase, AppSettings, ChitFund, ChitInstallment, Investment, InvestmentTransaction, Liability, LiabilityTransaction, Currency } from '../types';
+import { Expense, Income, Goal, Budget, GoldPurchase, AppSettings, ChitFund, ChitInstallment, Investment, InvestmentTransaction, Liability, LiabilityTransaction, UsefulLink, Currency } from '../types';
 import { generateId, convertToAED, convertToINR } from '../utils';
 
 // useAuthStore already keeps the logged-in user in memory (synced via
@@ -42,6 +42,7 @@ interface AppState {
   investmentTransactions: InvestmentTransaction[];
   liabilities: Liability[];
   liabilityTransactions: LiabilityTransaction[];
+  usefulLinks: UsefulLink[];
   settings: AppSettings;
   isLoading: boolean;
   rateJustUpdated: boolean;
@@ -96,6 +97,10 @@ interface AppState {
   updateLiabilityTransaction: (id: string, txn: Partial<LiabilityTransaction>) => Promise<void>;
   deleteLiabilityTransaction: (id: string) => Promise<void>;
 
+  addUsefulLink: (link: Omit<UsefulLink, 'id' | 'createdAt'>) => Promise<void>;
+  updateUsefulLink: (id: string, link: Partial<UsefulLink>) => Promise<void>;
+  deleteUsefulLink: (id: string) => Promise<void>;
+
   updateSettings: (settings: Partial<AppSettings>) => Promise<void>;
 }
 
@@ -145,6 +150,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     investmentTransactions: [],
     liabilities: [],
     liabilityTransactions: [],
+    usefulLinks: [],
     settings: DEFAULT_SETTINGS,
     isLoading: false,
     rateJustUpdated: false,
@@ -156,7 +162,7 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     initialize: async () => {
       set({ isLoading: true });
-      const [expenses, incomes, goals, budgets, goldPurchases, chitFunds, chitInstallments, investments, investmentTransactions, liabilities, liabilityTransactions, settings] = await Promise.all([
+      const [expenses, incomes, goals, budgets, goldPurchases, chitFunds, chitInstallments, investments, investmentTransactions, liabilities, liabilityTransactions, usefulLinks, settings] = await Promise.all([
         supabase.from('expenses').select('*').order('createdAt', { ascending: false }),
         supabase.from('incomes').select('*').order('createdAt', { ascending: false }),
         supabase.from('goals').select('*').order('createdAt', { ascending: false }),
@@ -168,6 +174,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         supabase.from('investment_transactions').select('*').order('date', { ascending: false }),
         supabase.from('liabilities').select('*').order('createdAt', { ascending: false }),
         supabase.from('liability_transactions').select('*').order('date', { ascending: false }),
+        supabase.from('useful_links').select('*').order('createdAt', { ascending: false }),
         supabase.from('settings').select('*').maybeSingle(),
       ]);
       // A brand-new user has no `settings` row yet (one is normally only
@@ -199,6 +206,7 @@ export const useAppStore = create<AppState>()((set, get) => {
         investmentTransactions: investmentTransactions.data ?? [],
         liabilities: liabilities.data ?? [],
         liabilityTransactions: liabilityTransactions.data ?? [],
+        usefulLinks: usefulLinks.data ?? [],
         settings: resolvedSettings,
         isLoading: false,
       });
@@ -216,6 +224,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       investmentTransactions: [],
       liabilities: [],
       liabilityTransactions: [],
+      usefulLinks: [],
       settings: DEFAULT_SETTINGS,
       toasts: [],
     }),
@@ -582,6 +591,24 @@ export const useAppStore = create<AppState>()((set, get) => {
       );
     },
 
+    addUsefulLink: async (link) => {
+      const newLink: UsefulLink = { ...link, id: generateId(), createdAt: new Date().toISOString() };
+      const uid = getUid();
+      await writeThrough('usefulLinks', [newLink, ...get().usefulLinks], () =>
+        supabase.from('useful_links').insert({ ...newLink, user_id: uid })
+      );
+    },
+    updateUsefulLink: async (id, link) => {
+      await writeThrough('usefulLinks', get().usefulLinks.map((l) => (l.id === id ? { ...l, ...link } : l)), () =>
+        supabase.from('useful_links').update(link).eq('id', id)
+      );
+    },
+    deleteUsefulLink: async (id) => {
+      await writeThrough('usefulLinks', get().usefulLinks.filter((l) => l.id !== id), () =>
+        supabase.from('useful_links').delete().eq('id', id)
+      );
+    },
+
     updateSettings: async (settings) => {
       const merged = { ...get().settings, ...settings };
       const user = useAuthStore.getState().user;
@@ -606,3 +633,4 @@ export const useInvestments = () => useAppStore((s) => s.investments);
 export const useInvestmentTransactions = () => useAppStore((s) => s.investmentTransactions);
 export const useLiabilities = () => useAppStore((s) => s.liabilities);
 export const useLiabilityTransactions = () => useAppStore((s) => s.liabilityTransactions);
+export const useUsefulLinks = () => useAppStore((s) => s.usefulLinks);

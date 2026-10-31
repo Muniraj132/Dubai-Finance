@@ -259,7 +259,22 @@ export const computeNetWorth = (inputs: NetWorthInputs): { netWorth: number; net
   };
 };
 
-export const exportToCSV = (data: Record<string, string | number | boolean | null | undefined>[], filename: string) => {
+// Useful Links: accepts "example.com" as well as full URLs (adds https://),
+// and returns null for anything that isn't http(s) — a saved link is
+// rendered as an <a href>, so a `javascript:` URL must never get through.
+export const normalizeUrl = (raw: string): string | null => {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const withScheme = /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(withScheme);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
+};
+
+export const exportToCSV =(data: Record<string, string | number | boolean | null | undefined>[], filename: string) => {
   if (!data.length) return;
   const headers = Object.keys(data[0]);
   const rows = data.map(row => headers.map(h => `"${row[h] ?? ''}"`).join(','));

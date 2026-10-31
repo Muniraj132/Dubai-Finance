@@ -91,6 +91,7 @@ bundles are fetched on demand instead of one large bundle. `Layout` and
 | `/converter` | `Converter.tsx` | Standalone AED⇄INR calculator + salary reference table (not tied to stored records) |
 | `/dubai-life` | `DubaiLife.tsx` | "Journey" dashboard: days in Dubai, lifetime totals, milestones, financial health score |
 | `/chit-funds` | `ChitFund.tsx` | Chit fund tracking (list + per-chit installment detail view) |
+| `/links` | `UsefulLinks.tsx` | Personal bookmark list (title, URL, description) with search, copy and open-in-new-tab |
 | `/reports` | `Reports.tsx` | CSV export for expenses/income/goals |
 | `/settings` | `Settings.tsx` | Manually edit exchange rate, Dubai arrival date, theme |
 
@@ -113,11 +114,12 @@ same browser would briefly see the previous user's cached state).
 
 Holds every domain collection (`expenses`, `incomes`, `goals`, `budgets`,
 `goldPurchases`, `chitFunds`, `chitInstallments`, `investments`,
-`investmentTransactions`, `liabilities`, `settings`) plus `isLoading`,
-`rateJustUpdated`, and `lastError`.
+`investmentTransactions`, `liabilities`, `liabilityTransactions`,
+`usefulLinks`, `settings`) plus `isLoading`, `rateJustUpdated`, and
+`lastError`.
 
 **Boot sequence**: `initialize()` (called once in `App.tsx` when `user`
-becomes truthy) fires all 11 Supabase `select` queries in parallel via
+becomes truthy) fires all 13 Supabase `select` queries in parallel via
 `Promise.all` and populates the store. There is no pagination/streaming —
 the entire dataset for the signed-in user is loaded into memory up front.
 This is fine at personal-finance-tracker scale but wouldn't scale to a
@@ -178,6 +180,7 @@ files:
 - `0007_liabilities.sql` — adds `liabilities` (loans, credit cards, other debts), so Net Worth can subtract what you owe (§7.11).
 - `0008_liability_transactions.sql` — adds `liabilities."status"` and `liability_transactions` (a Charge/Payment ledger), so outstanding balance/principal paid/interest paid are derived instead of one manually-edited number (§7.11).
 - `0009_account_type.sql` — adds `settings."accountType"` (`'dubai' | 'india'`), chosen once at registration (§7.12).
+- `0010_useful_links.sql` — adds `useful_links` (personal bookmarks for the `/links` page).
 
 ### Tables
 
@@ -199,6 +202,7 @@ for `all` operations — i.e., a user can only ever see/modify their own rows.
 | `investment_transactions` | `investment_id (FK), type, date, units, pricePerUnit, amount, currency, notes` + `amountAed/Inr, exchangeRateUsed` | Indexed on `investment_id`; deleting an investment cascades to its transactions, same pattern as chit installments. `units`/`pricePerUnit` are null for Dividend and for Fixed Deposit/PPF/NPS transactions |
 | `liabilities` | `type, name, currency, balance, status, notes, createdAt` + `balanceAed/Inr, exchangeRateUsed` | `balance` is the *opening* balance when the debt was first added, not a running total — current outstanding amount is derived from `balance` + its `liability_transactions` ledger (§7.11), same parent+child shape as `investments`/`investment_transactions` |
 | `liability_transactions` | `liability_id (FK), type, date, amount, interestAmount, currency, notes` + `amountAed/Inr, exchangeRateUsed` | Indexed on `liability_id`; deleting a liability cascades to its transactions. `type` is `Charge` (new debt, increases outstanding) or `Payment` (cash paid; `interestAmount` is the portion that's a cost, not principal — only `amount - interestAmount` reduces outstanding) |
+| `useful_links` | `title, url, description, createdAt` | No amounts, so no AED/INR snapshot columns. `url` is always http(s): the client runs every save through `normalizeUrl` (utils), which adds a missing `https://` and rejects other schemes such as `javascript:`, since the URL is rendered as a link |
 
 **Column-naming quirk to know about**: columns are a mix of plain lowercase
 (`amount`, `currency`, `date`) and double-quoted camelCase (`"createdAt"`,
@@ -414,8 +418,10 @@ exposes two functions:
   fund's AMFI scheme code (stored as `investments.schemeCode`). Only shown
   when `type === 'Mutual Fund'`; a fund doesn't have to be linked — it's an
   opt-in that unlocks the refresh action, not a requirement to add one.
-- `fetchLatestNav(schemeCode)` — hits `/mf/{schemeCode}`, returns the most
-  recent NAV entry.
+- `fetchLatestNav(schemeCode)` — hits `/mf/{schemeCode}/latest`, returns the
+  most recent NAV entry. It appends a `?_=<timestamp>` cache-buster because
+  mfapi.in's cache serves some HITs without `Access-Control-Allow-Origin`
+  (browsers then block them as CORS errors), and a cache MISS always has it.
 
 The "Refresh NAV" action (per-holding on the detail page, or "Refresh NAVs"
 in bulk from the list page, looping over every linked Mutual Fund) computes

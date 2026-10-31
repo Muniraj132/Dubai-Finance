@@ -27,7 +27,10 @@ export const searchMfSchemes = async (query: string): Promise<MfSchemeSearchResu
 
 export const fetchLatestNav = async (schemeCode: number): Promise<MfNav | null> => {
   try {
-    const res = await fetch(`https://api.mfapi.in/mf/${schemeCode}`);
+    // mfapi.in's cache serves some HITs without Access-Control-Allow-Origin,
+    // so the browser blocks them. A unique query param forces a cache MISS,
+    // which always carries the header.
+    const res = await fetch(`https://api.mfapi.in/mf/${schemeCode}/latest?_=${Date.now()}`);
     if (!res.ok) return null;
     const data = await res.json();
     const latest = data?.data?.[0];

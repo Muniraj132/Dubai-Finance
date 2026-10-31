@@ -31,6 +31,7 @@ there's a record of what changed and when.
 | `0007_liabilities.sql` | Adds `liabilities` (loans, credit card balances, other debts), following the same historical AED/INR snapshot pattern as every other amount table. Lets Net Worth subtract what you owe instead of being assets-only. Purely additive — no existing table is touched. |
 | `0008_liability_transactions.sql` | Adds `liabilities."status"` and `liability_transactions` (a Charge/Payment ledger, same parent+child shape as investments/investment_transactions). Outstanding balance, principal paid, and interest paid are now derived from this ledger instead of a single manually-edited number. Additive — existing `liabilities` rows keep working unchanged (their `balance` is read as the opening balance, which equals today's true outstanding amount for any row with no transactions logged yet). |
 | `0009_account_type.sql` | Adds `settings."accountType"` (`'dubai' \| 'india'`), chosen once at registration (see `src/pages/Auth.tsx`). India users work INR-only, with AED/Dubai-specific functionality hidden. Additive + defaulted to `'dubai'` — every pre-existing settings row (including accounts that existed before this feature) is unaffected. |
+| `0010_useful_links.sql` | Adds `useful_links` (`title`, `url`, `description`), a personal bookmark list shown on the `/links` page. Purely additive — no existing table is touched. |
 
 ## Upgrading to the real Supabase CLI later
 

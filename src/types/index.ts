@@ -251,6 +251,14 @@ export interface LiabilityStats {
   interestPaidInr: number;
 }
 
+export interface UsefulLink {
+  id: string;
+  title: string;
+  url: string; // always http(s) — normalized by normalizeUrl in utils
+  description: string;
+  createdAt: string;
+}
+
 // Breakdown of where a period's income actually went: living expenses,
 // investments (converted, not spent), chit fund contributions (also
 // converted, not spent — a pooled forced-savings scheme), debt paid down
