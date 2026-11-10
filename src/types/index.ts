@@ -63,6 +63,7 @@ export interface Goal {
   currentAmountAed?: number | null;
   currentAmountInr?: number | null;
   exchangeRateUsed?: number | null;
+  lastUpdatedAt: string;
 }
 
 export interface Budget {

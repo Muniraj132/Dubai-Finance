@@ -108,7 +108,7 @@ export default function ChitFunds() {
   const selectedInstallments = useMemo(
     () => chitInstallments
       .filter(i => i.chit_id === selectedChitId)
-      .sort((a, b) => a.month_no - b.month_no),
+      .sort((a, b) =>  b.month_no - a.month_no),
     [chitInstallments, selectedChitId],
   );
 
